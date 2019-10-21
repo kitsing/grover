@@ -114,7 +114,7 @@ with tf.Session(config=tf_config, graph=tf.Graph()) as sess, \
                                                         p_for_topp: np.ones((batch_size_per_chunk,),
                                                                             dtype=np.float32)})
             eos_position = np.argmax(tokens_out == encoder.__dict__['end_article'], axis=1) + 1
-            mask = np.range(tokens_out.shape[1], dtype=np.int32)[np.newaxis, :].tile((batch_size_per_chunk, 1))
+            mask = np.arange(tokens_out.shape[1], dtype=np.int32)[np.newaxis, :].tile((batch_size_per_chunk, 1))
             masked = mask < eos_position
 
             chunk_log_probs.append((masked * probs_out).sum(axis=1))
