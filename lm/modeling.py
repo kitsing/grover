@@ -357,8 +357,9 @@ def _top_p_sample(logits, ignore_ids=None, num_samples=1, p=0.9):
     with tf.variable_scope('top_p_sample'):
         batch_size, vocab_size = get_shape_list(logits, expected_rank=2)
 
-        probs = tf.nn.softmax(logits if ignore_ids is None else logits - tf.cast(ignore_ids[None], tf.float32) * 1e10,
-                              axis=-1)
+        masked_out_logits = logits if ignore_ids is None else logits - tf.cast(ignore_ids[None], tf.float32) * 1e10
+        probs = tf.nn.log_softmax(masked_out_logits,
+                                  axis=-1)
 
         if isinstance(p, float) and p > 0.999999:
             # Don't do top-p sampling in this case
@@ -366,7 +367,7 @@ def _top_p_sample(logits, ignore_ids=None, num_samples=1, p=0.9):
             return {
                 'probs': probs,
                 'sample': tf.random.categorical(
-                    logits=logits if ignore_ids is None else logits - tf.cast(ignore_ids[None], tf.float32) * 1e10,
+                    logits=masked_out_logits,
                     num_samples=num_samples, dtype=tf.int32),
             }
 
@@ -430,6 +431,119 @@ def _top_k_sample(logits, ignore_ids=None, num_samples=1, k=10):
         'probs': probs,
         'sample': sample,
     }
+
+
+class GroverModelResidual(object):
+    def __init__(self,
+                 config: GroverConfig,
+                 is_training,
+                 input_ids,
+                 cache=None,
+                 do_cache=False,
+                 pad_token_id=0,
+                 scope=None,
+                 reuse=False):
+        """
+        :param config:
+        :param is_training:
+        :param input_ids: Tensor thats of size [batch_size, seq_length]
+        :param cache: Optionally, a tensor to use that will contain cached information of the size
+            [batch_size, num_layers, 2, num_heads, cache_length, features]
+        :param do_cache: Whether to cache again.
+        :param pad_token_id: Which token will be used for padding (probably 0.)
+        :param scope: scope to run this on
+        """
+        self.config = copy.deepcopy(config)
+        self.is_training = is_training
+        self.pad_token_id = pad_token_id
+
+        if not is_training:
+            self.config.hidden_dropout_prob = 0.0
+            self.config.attention_probs_dropout_prob = 0.0
+
+        # autoencoder-like architecture
+        self.input_ids = input_ids
+        self.target_ids = input_ids
+
+        self.batch_size, self.seq_length = get_shape_list(self.input_ids, 2)
+
+        if cache is None:
+            caches = [None] * config.num_hidden_layers
+            self.cache_length = 0
+        else:
+            batch_size_, num_layers_, two_, num_heads_, self.cache_length, features_ = get_shape_list(
+                cache, expected_rank=6)
+            assert batch_size_ == self.batch_size
+            assert num_layers_ == config.num_hidden_layers
+            assert two_ == 2
+            assert num_heads_ == config.num_attention_heads
+            assert features_ == (config.hidden_size // config.num_attention_heads)
+            caches = tf.unstack(cache, axis=1)
+
+        with tf.variable_scope(scope, default_name='newslm', reuse=reuse):
+            with tf.variable_scope("embeddings"):
+                embeddings, self.embedding_table = embed(self.input_ids, config.vocab_size,
+                                                         config.hidden_size,
+                                                         position_offset=self.cache_length,
+                                                         initializer_range=config.initializer_range,
+                                                         max_position_embeddings=config.max_position_embeddings,
+                                                         use_one_hot_embeddings=True)
+
+            # we don't really need masking
+            mask = tf.ones((self.seq_length, self.seq_length + self.cache_length), dtype=embeddings.dtype)
+
+            # We keep the representation as a 2D tensor to avoid re-shaping it back and
+            # forth from a 3D tensor to a 2D tensor. Re-shapes are normally free on
+            # the GPU/CPU but may not be free on the TPU, so we want to minimize them to
+            # help the optimizer.
+            hidden_state = tf.reshape(embeddings, [self.batch_size * self.seq_length, self.config.hidden_size])
+            new_kvs = []
+            for layer_idx, layer_cache in enumerate(caches):
+                with tf.variable_scope('layer{:02d}'.format(layer_idx)):
+                    # [batch_size * seq_length, hidden_size]
+                    attention_output, new_kv = attention_layer(
+                        hidden_state,
+                        mask,
+                        batch_size=self.batch_size,
+                        seq_length=self.seq_length,
+                        size_per_head=config.hidden_size // config.num_attention_heads,
+                        num_attention_heads=config.num_attention_heads,
+                        initializer_range=config.initializer_range,
+                        hidden_dropout_prob=self.config.hidden_dropout_prob,
+                        attention_probs_dropout_prob=self.config.attention_probs_dropout_prob,
+                        do_cache=do_cache,
+                        cache=layer_cache,
+                    )
+                    new_kvs.append(new_kv)
+
+                    # [batch_size * seq_length, hidden_size]
+                    hidden_state = residual_mlp_layer(hidden_state + attention_output,
+                                                      intermediate_size=config.intermediate_size,
+                                                      hidden_dropout_prob=self.config.hidden_dropout_prob)
+            self.hidden_state = hidden_state
+
+        self.new_kvs = tf.stack(new_kvs, axis=1) if do_cache else None
+
+        # Note that the hidden state is still flat (batch_size*hidden_size)
+        self.logits_flat = tf.matmul(self.hidden_state, self.embedding_table, transpose_b=True)
+
+        # THE OUTPUT BIAS DOES NOT SPARK JOY
+        # output_bias = tf.get_variable('output_bias', shape=[config.vocab_size], initializer=tf.zeros_initializer())
+        # self.logits_flat = tf.nn.bias_add(self.logits_flat, output_bias)
+
+    @property
+    def residuals(self):
+        # this is just the residual
+        return tf.reshape(self.logits_flat, [self.batch_size, self.seq_length, -1])
+
+    def pooled_output(self, clf_token):
+        """
+        Extract pooled output given a token that says where we should look
+        :param clf_token:
+        :return:
+        """
+        pool_idx = tf.cast(tf.argmax(tf.cast(tf.equal(self.input_ids, clf_token), tf.float32), 1), tf.int32)
+        return tf.gather(self.hidden_state, tf.range(self.batch_size, dtype=tf.int32) * self.seq_length + pool_idx)
 
 
 class GroverModel(object):

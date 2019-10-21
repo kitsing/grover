@@ -4,7 +4,7 @@ import sys
 import json
 
 sys.path.append('../')
-from lm.modeling import GroverModel, GroverConfig, _top_p_sample, sample
+from lm.modeling import GroverModel, GroverConfig, sample
 from sample.encoder import get_encoder, format_context, _tokenize_article_pieces, extract_generated_target
 from tqdm import tqdm
 

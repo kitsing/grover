@@ -4,7 +4,7 @@ import sys
 import json
 
 sys.path.append('../')
-from lm.modeling import GroverModel, GroverConfig, _top_p_sample, sample
+from lm.modeling import GroverModel, GroverConfig, sample
 from sample.encoder import get_encoder, format_context, _tokenize_article_pieces, extract_generated_target
 from tqdm import tqdm
 
@@ -109,13 +109,14 @@ with tf.Session(config=tf_config, graph=tf.Graph()) as sess, \
         gen_probs = []
 
         article['top_ps'] = top_p.reshape(-1).tolist()
+        chunk_log_probs = []
         for chunk_i in range(num_chunks):
             tokens_out, probs_out = sess.run([tokens, probs],
                                              feed_dict={initial_context: [context_formatted] * batch_size_per_chunk,
                                                         eos_token: encoder.__dict__['end_article'],
                                                         ignore_ids: ignore_ids_np,
                                                         p_for_topp: top_p[chunk_i]})
-
+            chunk_log_probs.append(probs_out.sum(axis=1))
             for t_i, p_i in zip(tokens_out, probs_out):
                 extraction = extract_generated_target(output_tokens=t_i, encoder=encoder, target='article')
                 gens.append(extraction['extraction'])
@@ -126,7 +127,7 @@ with tf.Session(config=tf_config, graph=tf.Graph()) as sess, \
 
                 assert extraction['start_ind'] == len(context_formatted)
                 gen_probs.append(p_i[:extraction['end_ind'] - len(context_formatted) + 1].tolist())
-
+        article['gens_log_probs'] = tf.stack(chunk_log_probs, axis=1).sum(axis=1).tolist()
         article['gens_article'] = gens
         article['gensraw_article'] = gens_raw
         article['probs_article'] = gen_probs
