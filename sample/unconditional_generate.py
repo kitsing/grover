@@ -66,6 +66,9 @@ args = parser.parse_args()
 encoder = get_encoder()
 news_config = GroverConfig.from_json_file(args.model_config_fn)
 
+print('start: {}'.format(encoder.__dict__['start_article']))
+print('end: {}'.format(encoder.__dict__['end_article']))
+
 # We might have to split the batch into multiple chunks if the batch size is too large
 default_mbs = {12: 32, 24: 16, 48: 3}
 max_batch_size = args.max_batch_size if args.max_batch_size is not None else default_mbs[news_config.num_hidden_layers]
