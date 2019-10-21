@@ -8,6 +8,19 @@ from lm.modeling import GroverModel, GroverConfig, sample
 from sample.encoder import get_encoder, format_context, _tokenize_article_pieces, extract_generated_target
 from tqdm import tqdm
 
+
+def serialize(tokens: np.ndarray, probs: np.ndarray, prefix: str, dir: str):
+    """
+
+    :param tokens:
+    :param probs:
+    :return:
+    """
+    from tempfile import mkstemp
+    handle, filename = mkstemp(prefix=prefix, dir=dir, suffix='.npy')
+    np.savez(file=handle, tokens=tokens, probs=probs)
+
+
 import argparse
 
 parser = argparse.ArgumentParser(description='Contextual generation (aka given some metadata we will generate articles')
@@ -60,6 +73,8 @@ parser.add_argument(
     help='max batch size. You can leave this out and we will infer one based on the number of hidden layers',
 )
 
+parser.add_argument('-prefix', default='unconditioned_', type=str)
+parser.add_argument('-dir', default='./', type=str)
 
 args = parser.parse_args()
 
@@ -95,8 +110,7 @@ with tf.Session(config=tf_config, graph=tf.Graph()) as sess, \
     saver.restore(sess, args.model_ckpt)
 
     # Let's go!
-    articles = [ {} ]
-    for i, article in enumerate(tqdm(articles)):
+    for batch in tqdm(range(num_chunks), disable=None):
         context_formatted = []
         context_formatted.append(encoder.__dict__['begin_article'])
 
@@ -104,11 +118,6 @@ with tf.Session(config=tf_config, graph=tf.Graph()) as sess, \
         ignore_ids_np = np.array(encoder.special_tokens_onehot)
         ignore_ids_np[encoder.__dict__['end_article']] = 0
 
-        gens = []
-        gens_raw = []
-        gen_probs = []
-
-        chunk_log_probs = []
         for chunk_i in range(num_chunks):
             tokens_out, probs_out = sess.run([tokens, probs],
                                              feed_dict={initial_context: [context_formatted] * batch_size_per_chunk,
@@ -116,28 +125,8 @@ with tf.Session(config=tf_config, graph=tf.Graph()) as sess, \
                                                         ignore_ids: ignore_ids_np,
                                                         p_for_topp: np.ones((batch_size_per_chunk,),
                                                                             dtype=np.float32)})
-            eos_position = np.argmax(tokens_out[:, 1:] == encoder.__dict__['end_article'], axis=1) + 1
+            lengths = np.argmax(tokens_out[:, 1:] == encoder.__dict__['end_article'], axis=1) + 1
             mask = np.tile(np.arange(tokens_out.shape[1] - 1, dtype=np.int32)[np.newaxis, :],(batch_size_per_chunk, 1))
-            masked = mask < eos_position[:, np.newaxis]
-
-            chunk_log_probs.append((masked * probs_out).sum(axis=1))
-            for t_i, p_i in zip(tokens_out, probs_out):
-                extraction = extract_generated_target(output_tokens=t_i, encoder=encoder, target='article')
-                gens.append(extraction['extraction'])
-
-                # NOTE: Originally I didn't add the +1 which meant that end article was being cut off. whoops.
-                # better add that!
-                gens_raw.append(t_i[extraction['start_ind']:extraction['end_ind'] + 1].tolist())
-
-                assert extraction['start_ind'] == len(context_formatted)
-                gen_probs.append(p_i[:extraction['end_ind'] - len(context_formatted) + 1].tolist())
-        article['gens_log_probs'] = np.concatenate(chunk_log_probs, axis=0).tolist()
-        for g_i, (g, g_raw) in enumerate(zip(gens, gens_raw)):
-            article[f'gens_article_{g_i}'] = g
-            article[f'gensraw_article_{g_i}'] = g_raw
-        article['probs_article'] = gen_probs
-
-        # these were in there for whatever reason...
-        article.pop('input_ids_conditional', None)
-        article.pop('input_ids_unconditional', None)
-        f_out.write(json.dumps(article) + '\n')
+            masked = mask < lengths[:, np.newaxis]
+            seq_probs = (masked * probs_out).sum(axis=1)
+            serialize(tokens_out, seq_probs, args.prefix, args.dir)
