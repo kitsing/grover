@@ -77,7 +77,7 @@ print("\n~~\nbatch size={}, max batch size={}, num chunks={}, batch size per chu
     args.batch_size, max_batch_size, num_chunks, batch_size_per_chunk), flush=True)
 
 # This controls the top p for each generation.
-top_p = np.ones((num_chunks, batch_size_per_chunk), dtype=np.float32)
+top_p = np.ones((num_chunks, batch_size_per_chunk), dtype=np.float32) * 0.9999999
 
 tf_config = tf.ConfigProto(allow_soft_placement=True)
 
@@ -95,12 +95,14 @@ with tf.Session(config=tf_config, graph=tf.Graph()) as sess, \
     saver.restore(sess, args.model_ckpt)
 
     # Let's go!
-    for i, article in enumerate(tqdm(range(1))):
+    articles = [ {} ]
+    for i, article in enumerate(tqdm(articles)):
         context_formatted = []
+        context_formatted.append(encoder.__dict__['begin_article'])
 
         # Indices we definitely DONT WANT TO PREDICT
         ignore_ids_np = np.array(encoder.special_tokens_onehot)
-        ignore_ids_np[encoder.__dict__['end_{}'.format(args.target)]] = 0
+        ignore_ids_np[encoder.__dict__['end_article']] = 0
 
         gens = []
         gens_raw = []
@@ -110,12 +112,12 @@ with tf.Session(config=tf_config, graph=tf.Graph()) as sess, \
         for chunk_i in range(num_chunks):
             tokens_out, probs_out = sess.run([tokens, probs],
                                              feed_dict={initial_context: [context_formatted] * batch_size_per_chunk,
-                                                        eos_token: encoder.__dict__['end_{}'.format(args.target)],
+                                                        eos_token: encoder.__dict__['end_article'],
                                                         ignore_ids: ignore_ids_np,
                                                         p_for_topp: top_p[chunk_i]})
 
             for t_i, p_i in zip(tokens_out, probs_out):
-                extraction = extract_generated_target(output_tokens=t_i, encoder=encoder, target=args.target)
+                extraction = extract_generated_target(output_tokens=t_i, encoder=encoder, target='article')
                 gens.append(extraction['extraction'])
 
                 # NOTE: Originally I didn't add the +1 which meant that end article was being cut off. whoops.
@@ -125,9 +127,9 @@ with tf.Session(config=tf_config, graph=tf.Graph()) as sess, \
                 assert extraction['start_ind'] == len(context_formatted)
                 gen_probs.append(p_i[:extraction['end_ind'] - len(context_formatted) + 1].tolist())
 
-        article['gens_{}'.format(args.target)] = gens
-        article['gensraw_{}'.format(args.target)] = gens_raw
-        article['probs_{}'.format(args.target)] = gen_probs
+        article['gens_article'] = gens
+        article['gensraw_article'] = gens_raw
+        article['probs_article'] = gen_probs
 
         # these were in there for whatever reason...
         article.pop('input_ids_conditional', None)
