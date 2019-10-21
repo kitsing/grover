@@ -124,7 +124,7 @@ with tf.Session(config=tf_config, graph=tf.Graph()) as sess, \
 
                 assert extraction['start_ind'] == len(context_formatted)
                 gen_probs.append(p_i[:extraction['end_ind'] - len(context_formatted) + 1].tolist())
-        article['gens_log_probs'] = np.stack(chunk_log_probs, axis=1).sum(axis=1).tolist()
+        article['gens_log_probs'] = np.concatenate(chunk_log_probs, axis=0).tolist()
         for g_i, (g, g_raw) in enumerate(zip(gens, gens_raw)):
             article[f'gens_article_{g_i}'] = g
             article[f'gensraw_article_{g_i}'] = g_raw
