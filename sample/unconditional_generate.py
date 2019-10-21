@@ -77,7 +77,7 @@ parser.add_argument(
 
 parser.add_argument('-prefix', default='unconditioned_', type=str)
 parser.add_argument('-dir', default='./', type=str)
-parser.add_argument('-num-grpus', default=8, type=int)
+parser.add_argument('-num_gpus', default=8, type=int)
 
 args = parser.parse_args()
 
@@ -110,18 +110,18 @@ tokens, probs = sample(news_config=news_config, initial_context=initial_context,
 all_tokens = []
 all_probs = []
 
-for i in range(args.num_gpus):
-    with tf.device('/gpu:'+str(i)):
-        all_tokens.append(tokens)
-        all_probs.append(probs)
-
-with tf.device('/cpu:0'):
-    merged_tokens = tf.concat(all_tokens, axis=0)
-    merged_probs = tf.concat(all_probs, axis=0)
 
 with tf.Session(config=tf_config, graph=tf.Graph()) as sess, \
         open(args.out_fn, 'w') as f_out:
 
+    for i in range(args.num_gpus):
+        with tf.device('/gpu:'+str(i)):
+            all_tokens.append(tokens)
+            all_probs.append(probs)
+
+    with tf.device('/cpu:0'):
+        merged_tokens = tf.concat(all_tokens, axis=0)
+        merged_probs = tf.concat(all_probs, axis=0)
 
     saver = tf.train.Saver()
     saver.restore(sess, args.model_ckpt)
