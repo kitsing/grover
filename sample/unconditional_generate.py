@@ -75,6 +75,7 @@ parser.add_argument(
 
 parser.add_argument('-prefix', default='unconditioned_', type=str)
 parser.add_argument('-dir', default='./', type=str)
+parser.add_argument('-num-grpus', default=8, type=int)
 
 args = parser.parse_args()
 
@@ -96,15 +97,29 @@ print("\n~~\nbatch size={}, max batch size={}, num chunks={}, batch size per chu
 
 tf_config = tf.ConfigProto(allow_soft_placement=True)
 
+initial_context = tf.placeholder(tf.int32, [batch_size_per_chunk, None])
+p_for_topp = tf.placeholder(tf.float32, [batch_size_per_chunk])
+eos_token = tf.placeholder(tf.int32, [])
+ignore_ids = tf.placeholder(tf.bool, [news_config.vocab_size])
+tokens, probs = sample(news_config=news_config, initial_context=initial_context,
+                       eos_token=eos_token, ignore_ids=ignore_ids, p_for_topp=p_for_topp,
+                       do_topk=False)
+
+all_tokens = []
+all_probs = []
+
+for i in range(args.num_gpus):
+    with tf.device('/gpu:'+str(i)):
+        all_tokens.append(tokens)
+        all_probs.append(probs)
+
+with tf.device('/cpu:0'):
+    merged_tokens = tf.concat(all_tokens, axis=0)
+    merged_probs = tf.concat(all_probs, axis=0)
+
 with tf.Session(config=tf_config, graph=tf.Graph()) as sess, \
         open(args.out_fn, 'w') as f_out:
-    initial_context = tf.placeholder(tf.int32, [batch_size_per_chunk, None])
-    p_for_topp = tf.placeholder(tf.float32, [batch_size_per_chunk])
-    eos_token = tf.placeholder(tf.int32, [])
-    ignore_ids = tf.placeholder(tf.bool, [news_config.vocab_size])
-    tokens, probs = sample(news_config=news_config, initial_context=initial_context,
-                           eos_token=eos_token, ignore_ids=ignore_ids, p_for_topp=p_for_topp,
-                           do_topk=False)
+
 
     saver = tf.train.Saver()
     saver.restore(sess, args.model_ckpt)
@@ -119,7 +134,7 @@ with tf.Session(config=tf_config, graph=tf.Graph()) as sess, \
         ignore_ids_np[encoder.__dict__['end_article']] = 0
 
         for chunk_i in range(num_chunks):
-            tokens_out, probs_out = sess.run([tokens, probs],
+            tokens_out, probs_out = sess.run([merged_tokens, merged_probs],
                                              feed_dict={initial_context: [context_formatted] * batch_size_per_chunk,
                                                         eos_token: encoder.__dict__['end_article'],
                                                         ignore_ids: ignore_ids_np,
