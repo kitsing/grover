@@ -99,20 +99,21 @@ print("\n~~\nbatch size={}, max batch size={}, num chunks={}, batch size per chu
 
 tf_config = tf.ConfigProto(allow_soft_placement=True)
 
-initial_context = tf.placeholder(tf.int32, [batch_size_per_chunk, None])
-p_for_topp = tf.placeholder(tf.float32, [batch_size_per_chunk])
-eos_token = tf.placeholder(tf.int32, [])
-ignore_ids = tf.placeholder(tf.bool, [news_config.vocab_size])
-tokens, probs = sample(news_config=news_config, initial_context=initial_context,
-                       eos_token=eos_token, ignore_ids=ignore_ids, p_for_topp=p_for_topp,
-                       do_topk=False)
-
-all_tokens = []
-all_probs = []
 
 
 with tf.Session(config=tf_config, graph=tf.Graph()) as sess, \
         open(args.out_fn, 'w') as f_out:
+
+    initial_context = tf.placeholder(tf.int32, [batch_size_per_chunk, None])
+    p_for_topp = tf.placeholder(tf.float32, [batch_size_per_chunk])
+    eos_token = tf.placeholder(tf.int32, [])
+    ignore_ids = tf.placeholder(tf.bool, [news_config.vocab_size])
+    tokens, probs = sample(news_config=news_config, initial_context=initial_context,
+                           eos_token=eos_token, ignore_ids=ignore_ids, p_for_topp=p_for_topp,
+                           do_topk=False)
+
+    all_tokens = []
+    all_probs = []
 
     for i in range(args.num_gpus):
         with tf.device('/gpu:'+str(i)):
