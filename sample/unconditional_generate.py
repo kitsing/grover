@@ -66,7 +66,7 @@ args = parser.parse_args()
 encoder = get_encoder()
 news_config = GroverConfig.from_json_file(args.model_config_fn)
 
-print('start: {}'.format(encoder.__dict__['start_article']))
+print('start: {}'.format(encoder.__dict__['begin_article']))
 print('end: {}'.format(encoder.__dict__['end_article']))
 
 # We might have to split the batch into multiple chunks if the batch size is too large
