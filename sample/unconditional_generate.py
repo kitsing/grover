@@ -17,8 +17,10 @@ def serialize(tokens: np.ndarray, probs: np.ndarray, prefix: str, dir: str):
     :return:
     """
     from tempfile import mkstemp
-    handle, filename = mkstemp(prefix=prefix, dir=dir, suffix='.npy')
-    np.savez(file=handle, tokens=tokens, probs=probs)
+    handle, filename = mkstemp(prefix=prefix, dir=dir, suffix='.npz')
+    from os import close
+    close(handle)
+    np.savez(file=filename, tokens=tokens, probs=probs)
 
 
 import argparse
