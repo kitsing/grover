@@ -76,9 +76,6 @@ batch_size_per_chunk = int(np.ceil(args.batch_size / num_chunks))
 print("\n~~\nbatch size={}, max batch size={}, num chunks={}, batch size per chunk={}\n~~\n".format(
     args.batch_size, max_batch_size, num_chunks, batch_size_per_chunk), flush=True)
 
-# This controls the top p for each generation.
-top_p = np.ones((num_chunks, batch_size_per_chunk), dtype=np.float32) * 0.9999999
-
 tf_config = tf.ConfigProto(allow_soft_placement=True)
 
 with tf.Session(config=tf_config, graph=tf.Graph()) as sess, \
@@ -108,14 +105,14 @@ with tf.Session(config=tf_config, graph=tf.Graph()) as sess, \
         gens_raw = []
         gen_probs = []
 
-        article['top_ps'] = top_p.reshape(-1).tolist()
         chunk_log_probs = []
         for chunk_i in range(num_chunks):
             tokens_out, probs_out = sess.run([tokens, probs],
                                              feed_dict={initial_context: [context_formatted] * batch_size_per_chunk,
                                                         eos_token: encoder.__dict__['end_article'],
                                                         ignore_ids: ignore_ids_np,
-                                                        p_for_topp: top_p[chunk_i]})
+                                                        p_for_topp: np.ones((batch_size_per_chunk,),
+                                                                            dtype=np.float32)})
             chunk_log_probs.append(probs_out.sum(axis=1))
             for t_i, p_i in zip(tokens_out, probs_out):
                 extraction = extract_generated_target(output_tokens=t_i, encoder=encoder, target='article')
