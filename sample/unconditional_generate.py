@@ -136,15 +136,14 @@ with tf.Session(config=tf_config, graph=tf.Graph()) as sess, \
         ignore_ids_np = np.array(encoder.special_tokens_onehot)
         ignore_ids_np[encoder.__dict__['end_article']] = 0
 
-        for chunk_i in range(num_chunks):
-            tokens_out, probs_out = sess.run([merged_tokens, merged_probs],
-                                             feed_dict={initial_context: [context_formatted] * batch_size_per_chunk,
-                                                        eos_token: encoder.__dict__['end_article'],
-                                                        ignore_ids: ignore_ids_np,
-                                                        p_for_topp: np.ones((batch_size_per_chunk,),
-                                                                            dtype=np.float32)})
-            lengths = np.argmax(tokens_out[:, 1:] == encoder.__dict__['end_article'], axis=1) + 1
-            mask = np.tile(np.arange(tokens_out.shape[1] - 1, dtype=np.int32)[np.newaxis, :],(batch_size_per_chunk, 1))
-            masked = mask < lengths[:, np.newaxis]
-            seq_probs = (masked * probs_out).sum(axis=1)
-            serialize(tokens_out, seq_probs, args.prefix, args.dir)
+        tokens_out, probs_out = sess.run([merged_tokens, merged_probs],
+                                         feed_dict={initial_context: [context_formatted] * batch_size_per_chunk,
+                                                    eos_token: encoder.__dict__['end_article'],
+                                                    ignore_ids: ignore_ids_np,
+                                                    p_for_topp: np.ones((batch_size_per_chunk,),
+                                                                        dtype=np.float32)})
+        lengths = np.argmax(tokens_out[:, 1:] == encoder.__dict__['end_article'], axis=1) + 1
+        mask = np.tile(np.arange(tokens_out.shape[1] - 1, dtype=np.int32)[np.newaxis, :],(tokens_out.shape[0], 1))
+        masked = mask < lengths[:, np.newaxis]
+        seq_probs = (masked * probs_out).sum(axis=1)
+        serialize(tokens_out, seq_probs, args.prefix, args.dir)
