@@ -225,7 +225,7 @@ def _cut_tokens_to_add_stuff(tokens, stuff_to_add, desired_size, padding_token):
 
 
 def tokenize_for_grover_training(encoder, item, desired_size=1024, unconditional_prob=0.35, metadata_dropout_prob=0.1,
-                                 cut_prob=0.2):
+                                 cut_prob=0.2, drop_metadata_when_unconditional: bool = False):
     """
     Not only will we tokenize an item with a BPE encoder, but we'll also put it in a nice format for language modeling.
     The goal is to MINIMIZE PADDING. If we don't fill up the desired size of 1024 tokens then we're wasting compute.
@@ -252,6 +252,7 @@ def tokenize_for_grover_training(encoder, item, desired_size=1024, unconditional
     :param metadata_dropout_prob: The probability that we will drop out each item of metadata
     :param cut_prob: The probability that, if we're already over the desired size, we'll cut the article and start
                     predicting metadata before the desired_size window ends.
+    :param drop_metadata_when_unconditional: if True, we don't include metadata in chunk_b in the unconditional case
     :return:
     """
     # Get all the bits and pieces
@@ -264,10 +265,11 @@ def tokenize_for_grover_training(encoder, item, desired_size=1024, unconditional
         assignments = {'article': 'a'}
         chunk_a = article_pieces.pop('article')
         chunk_b = []
-        for x in canonical_metadata_order + ['summary']:
-            if random.random() > metadata_dropout_prob:
-                chunk_b.extend(article_pieces.pop(x, []))
-                assignments[x] = 'b'
+        if drop_metadata_when_unconditional:
+            for x in canonical_metadata_order + ['summary']:
+                if random.random() > metadata_dropout_prob:
+                    chunk_b.extend(article_pieces.pop(x, []))
+                    assignments[x] = 'b'
     elif switch < 0.5:
         # Put everything in chunk_a, without dropout
         assignments = {}

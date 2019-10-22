@@ -31,6 +31,64 @@ def _decode_record(record, name_to_features):
     return example
 
 
+def nce_input_fn_builder(input_files,
+                         seq_length,
+                         is_training,
+                         num_cpu_threads=4,
+                         evaluate_for_fixed_number_of_steps=True):
+    """Creates an `input_fn` closure to be passed to TPUEstimator."""
+
+    def input_fn(params):
+        """The actual input function."""
+        batch_size = params["batch_size"]
+        k = params['k']
+        name_to_features = {
+            "input_ids": tf.FixedLenFeature([seq_length + 1], tf.int64),
+            'input_probs': tf.FixedLenFeature((1,), dtype=tf.float32),
+            'noises': tf.FixedLenFeature((k, seq_length + 1), tf.int64),
+            'noise_probs': tf.FixedLenFeature((k,), dtype=tf.float32)
+        }
+
+        # For training, we want a lot of parallel reading and shuffling.
+        # For eval, we want no shuffling and parallel reading doesn't matter.
+        if is_training:
+            d = tf.data.Dataset.from_tensor_slices(tf.constant(input_files))
+            d = d.repeat()
+            d = d.shuffle(buffer_size=len(input_files))
+
+            # `cycle_length` is the number of parallel files that get read.
+            cycle_length = min(num_cpu_threads, len(input_files))
+
+            # `sloppy` mode means that the interleaving is not exact. This adds
+            # even more randomness to the training pipeline.
+            d = d.apply(
+                tf.data.experimental.parallel_interleave(
+                    tf.data.TFRecordDataset,
+                    sloppy=is_training,
+                    cycle_length=cycle_length))
+            d = d.shuffle(buffer_size=100)
+        else:
+            d = tf.data.TFRecordDataset(input_files)
+            # If we evaluate for a fixed number of steps we don't want to encounter
+            # out-of-range exceptions.
+            if evaluate_for_fixed_number_of_steps:
+                d = d.repeat()
+
+        # We must `drop_remainder` on training because the TPU requires fixed
+        # size dimensions. For eval, we assume we are evaluating on the CPU or GPU
+        # and we *don't* want to drop the remainder, otherwise we wont cover
+        # every sample.
+        d = d.apply(
+            tf.data.experimental.map_and_batch(
+                lambda record: _decode_record(record, name_to_features),
+                batch_size=batch_size,
+                num_parallel_batches=num_cpu_threads,
+                drop_remainder=True))
+        return d
+
+    return input_fn
+
+
 def input_fn_builder(input_files,
                      seq_length,
                      is_training,

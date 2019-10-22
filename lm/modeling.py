@@ -438,15 +438,17 @@ class GroverModelResidual(object):
                  config: GroverConfig,
                  is_training,
                  input_ids,
+                 noises,
                  cache=None,
                  do_cache=False,
                  pad_token_id=0,
                  scope=None,
-                 reuse=False):
+                 reuse=False, alpha: float = 1.):
         """
         :param config:
         :param is_training:
         :param input_ids: Tensor thats of size [batch_size, seq_length]
+        :param noises: Tensor that's of size [batch_size, k, seq_length]
         :param cache: Optionally, a tensor to use that will contain cached information of the size
             [batch_size, num_layers, 2, num_heads, cache_length, features]
         :param do_cache: Whether to cache again.
@@ -457,15 +459,17 @@ class GroverModelResidual(object):
         self.is_training = is_training
         self.pad_token_id = pad_token_id
 
+        self.alpha = alpha
+
         if not is_training:
             self.config.hidden_dropout_prob = 0.0
             self.config.attention_probs_dropout_prob = 0.0
 
         # autoencoder-like architecture
-        self.input_ids = input_ids
-        self.target_ids = input_ids
+        self.batch_size, self.seq_length = get_shape_list(input_ids, 2)
 
-        self.batch_size, self.seq_length = get_shape_list(self.input_ids, 2)
+        self.flattened_noises = tf.reshape(noises, (-1, self.seq_length))
+        self.input_ids = tf.concat((input_ids, self.flattened_noises), axis=0)
 
         if cache is None:
             caches = [None] * config.num_hidden_layers
@@ -524,17 +528,20 @@ class GroverModelResidual(object):
 
         self.new_kvs = tf.stack(new_kvs, axis=1) if do_cache else None
 
-        # Note that the hidden state is still flat (batch_size*hidden_size)
-        self.logits_flat = tf.matmul(self.hidden_state, self.embedding_table, transpose_b=True)
+        self.residuals = tf.reduce_sum(tf.reshape(self.hidden_state, [self.batch_size, self.seq_length, -1]),
+                                       axis=(1, 2))
 
         # THE OUTPUT BIAS DOES NOT SPARK JOY
         # output_bias = tf.get_variable('output_bias', shape=[config.vocab_size], initializer=tf.zeros_initializer())
         # self.logits_flat = tf.nn.bias_add(self.logits_flat, output_bias)
 
-    @property
-    def residuals(self):
-        # this is just the residual
-        return tf.reshape(self.logits_flat, [self.batch_size, self.seq_length, -1])
+    def total_loss(self):
+        if self.alpha == 1.:
+            total_loss = - (self.residuals[:, 0] - tf.reduce_logsumexp(self.residuals, axis=1))
+            return tf.reduce_mean(total_loss, axis=0)
+        else:
+            # TODO implement this!
+            raise NotImplementedError
 
     def pooled_output(self, clf_token):
         """
@@ -693,7 +700,7 @@ class GroverModel(object):
 
 
 def model_fn_builder(config: GroverConfig, init_checkpoint, learning_rate,
-                     num_train_steps, num_warmup_steps, use_tpu):
+                     num_train_steps, num_warmup_steps, use_tpu, build_residual: bool = False):
     """Returns `model_fn` closure for TPUEstimator."""
 
     def model_fn(features, labels, mode, params):  # pylint: disable=unused-argument
@@ -707,15 +714,148 @@ def model_fn_builder(config: GroverConfig, init_checkpoint, learning_rate,
 
         is_training = (mode == tf.estimator.ModeKeys.TRAIN)
 
-        model = GroverModel(
+        if build_residual:
+            model = GroverModelResidual(
+                config=config,
+                is_training=is_training,
+                input_ids=input_ids,
+                pad_token_id=config.pad_token_id,
+            )
+        else:
+            model = GroverModel(
+                config=config,
+                is_training=is_training,
+                input_ids=input_ids,
+                pad_token_id=config.pad_token_id,
+                chop_off_last_token=True,
+            )
+
+        total_loss = model.lm_loss()
+
+        if is_training:
+            train_op, train_metrics = optimization_adafactor.create_optimizer(
+                total_loss, learning_rate, num_train_steps, num_warmup_steps, use_tpu)
+            tvars = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES)
+        else:
+            train_op = None
+            train_metrics = {}
+            tvars = tf.trainable_variables()
+
+        initialized_variable_names = {}
+        scaffold_fn = None
+        if init_checkpoint:
+            (assignment_map, initialized_variable_names
+             ) = get_assignment_map_from_checkpoint(tvars, init_checkpoint)
+            if use_tpu:
+                def tpu_scaffold():
+                    tf.train.init_from_checkpoint(init_checkpoint, assignment_map)
+                    return tf.train.Scaffold()
+
+                scaffold_fn = tpu_scaffold
+            else:
+                tf.train.init_from_checkpoint(init_checkpoint, assignment_map)
+
+        tf.logging.info("**** Trainable Variables ****")
+        for var in tvars:
+            init_string = ""
+            if var.name in initialized_variable_names:
+                init_string = ", *INIT_FROM_CKPT*"
+            tf.logging.info("  name = %s, shape = %s%s", var.name, var.shape,
+                            init_string)
+
+        output_spec = None
+        if mode == tf.estimator.ModeKeys.TRAIN:
+            if use_tpu:
+                output_spec = tf.contrib.tpu.TPUEstimatorSpec(
+                    mode=mode,
+                    loss=total_loss,
+                    train_op=train_op,
+                    host_call=construct_scalar_host_call(metric_dict=train_metrics, model_dir=params['model_dir'],
+                                                         prefix='training/'),
+                    scaffold_fn=scaffold_fn)
+            else:
+                output_spec = tf.contrib.tpu.TPUEstimatorSpec(
+                    mode=mode,
+                    loss=total_loss,
+                    train_op=train_op,
+                    training_hooks=[
+                        tf.train.LoggingTensorHook({'loss': tf.metrics.mean(total_loss)[1]}, every_n_iter=100)],
+                    scaffold_fn=scaffold_fn)
+
+        elif mode == tf.estimator.ModeKeys.EVAL:
+            def metric_fn(total_loss):
+                loss = tf.metrics.mean(values=total_loss)
+                return {
+                    "eval_loss": loss,
+                }
+
+            eval_metrics = (metric_fn,
+                            [total_loss])
+            output_spec = tf.contrib.tpu.TPUEstimatorSpec(
+                mode=mode,
+                loss=total_loss,
+                eval_metrics=eval_metrics,
+                scaffold_fn=scaffold_fn)
+        else:
+            gt_logprobs = tf.squeeze(tf.batch_gather(model.log_probs, model.target_ids[:, :, None]), axis=2)
+
+            # Need top-p required under topp sampling!
+            better_than_gt = model.log_probs > gt_logprobs[:, :, None]
+            top_p_required = tf.reduce_sum(tf.cast(better_than_gt, tf.float32) * tf.exp(model.log_probs), axis=2)
+
+            # No top-p sampling for now, since this seems to be too slow on TPUs
+            if use_tpu:
+                predictions = tf.reshape(
+                    tf.random.categorical(logits=model.logits_flat, num_samples=1),
+                    get_shape_list(model.target_ids),
+                )
+            else:
+                # Argmax
+                # predictions = tf.math.argmax(model.log_probs, axis=-1, output_type=tf.int32)
+                predictions = tf.reshape(
+                    _top_p_sample(model.logits_flat, num_samples=1, p=0.99)['sample'],
+                    get_shape_list(model.target_ids),
+                )
+            pred_logprobs = tf.squeeze(tf.batch_gather(model.log_probs, predictions[:, :, None]), axis=2)
+
+            output_spec = tf.contrib.tpu.TPUEstimatorSpec(
+                mode=mode,
+                predictions={'gt_logprobs': gt_logprobs,
+                             'top_p_required': top_p_required,
+                             'predictions': predictions,
+                             'pred_logprobs': pred_logprobs,
+                             'labels': input_ids},
+                scaffold_fn=scaffold_fn)
+        return output_spec
+
+    return model_fn
+
+
+def nce_model_fn_builder(config: GroverConfig, init_checkpoint, learning_rate,
+                         num_train_steps, num_warmup_steps, use_tpu):
+    """Returns `model_fn` closure for TPUEstimator."""
+
+    def model_fn(features, labels, mode, params):  # pylint: disable=unused-argument
+        """The `model_fn` for TPUEstimator."""
+
+        tf.logging.info("*** Features ***")
+        for name in sorted(features.keys()):
+            tf.logging.info("  name = %s, shape = %s" % (name, features[name].shape))
+
+        input_ids = features["input_ids"]
+        noises = features['noises']
+
+        is_training = (mode == tf.estimator.ModeKeys.TRAIN)
+
+        residual_model = GroverModelResidual(
             config=config,
             is_training=is_training,
             input_ids=input_ids,
+            noises=noises,
             pad_token_id=config.pad_token_id,
-            chop_off_last_token=True,
         )
 
-        total_loss = model.lm_loss()
+        total_loss = residual_model.total_loss()
 
         if is_training:
             train_op, train_metrics = optimization_adafactor.create_optimizer(
