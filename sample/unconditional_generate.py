@@ -99,8 +99,6 @@ print("\n~~\nbatch size={}, max batch size={}, num chunks={}, batch size per chu
 
 tf_config = tf.ConfigProto(allow_soft_placement=True)
 
-
-
 with tf.Session(config=tf_config, graph=tf.Graph()) as sess, \
         open(args.out_fn, 'w') as f_out:
 
