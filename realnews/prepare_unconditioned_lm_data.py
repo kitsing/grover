@@ -6,7 +6,7 @@ as that's where I had the deduplicated RealNews dataset.
 """
 import argparse
 import ujson as json
-from sample.encoder import get_encoder, tokenize_for_grover_training, detokenize, sliding_window, create_int_feature
+from sample.encoder import get_encoder, tokenize_for_grover_training, detokenize, just_pad, create_int_feature
 import random
 import tensorflow as tf
 import collections
@@ -140,26 +140,27 @@ def article_only_iterator(encoder, final_desired_size=1025):
     with open(args.input_fn, 'r') as f:
         for l_no, l in enumerate(f):
             if l_no % args.num_folds == args.fold:
-                article = json.loads(l)
-                article['input_ids'] = tokenize_for_grover_training(encoder, article, desired_size=final_desired_size,
-                                                                    unconditional_prob=1., metadata_dropout_prob=1.,
-                                                                    cut_prob=0., drop_metadata_when_unconditional=True)
-                article['inst_index'] = (l_no // args.num_folds)
-                if len(article['input_ids']) == 0:
+                a = json.loads(l)
+                a['input_ids'] = tokenize_for_grover_training(encoder, a, desired_size=final_desired_size,
+                                                              unconditional_prob=1., metadata_dropout_prob=1.,
+                                                              cut_prob=0., drop_metadata_when_unconditional=True)
+                a['inst_index'] = (l_no // args.num_folds)
+                # we don't do any truncation etc. just move on to the next article
+                if len(a['input_ids']) == 0 or len(a['input_ids']) >= final_desired_size:
                     continue
-                yield article
+                yield a
 
 
-def unbuffered_and_sliding_window_article_iterator(encoder, current_desired_size, final_desired_size=1025):
-    """ We apply a sliding window to fix long sequences, and use a buffer that combines short sequences."""
-    assert current_desired_size <= final_desired_size
+def unbuffered_and_sliding_window_article_iterator(encoder, final_desired_size=1025):
+    """
 
-    for article in article_only_iterator(encoder, final_desired_size=final_desired_size):
-        for sub_index, sub_article in enumerate(sliding_window(article, max_seq_length=current_desired_size,
-                                                               pad_token=encoder.padding)):
-            sub_article['sub_index'] = sub_index
-            # print(f"AMT2PAD < 0 YIELD-{inst_index} sliding window {sub_index}", flush=True)
-            yield sub_article
+    :param encoder:
+    :param final_desired_size:
+    :return:
+    """
+
+    for a in article_only_iterator(encoder, final_desired_size=final_desired_size):
+        yield just_pad(a, max_seq_length=final_desired_size, pad_token=encoder.padding)
 
 
 # OK now write the tfrecord file
@@ -167,7 +168,7 @@ total_written = 0
 train_file = args.base_fn + 'train{:04d}.tfrecord'.format(args.fold)
 val_file = args.base_fn + 'val{:04d}.tfrecord'.format(args.fold)
 with S3TFRecordWriter(train_file) as train_writer, S3TFRecordWriter(val_file) as val_writer:
-    for article in unbuffered_and_sliding_window_article_iterator(encoder, current_desired_size=args.max_seq_length + 1,
+    for article in unbuffered_and_sliding_window_article_iterator(encoder,
                                                                   final_desired_size=max(args.max_seq_length + 1, 1025)):
         writer2use = train_writer if article['split'] == 'train' else val_writer
         assert len(article['input_ids']) == (args.max_seq_length + 1)
