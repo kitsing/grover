@@ -94,7 +94,7 @@ def nce_input_fn_builder(input_files, noise_files, k,
         }
 
         built_gen = build_gen(noise_files, k)
-        nd = tf.data.Dataset.from_generator(built_gen, (tf.int64,), output_shapes=(k,seq_length+1,))
+        nd = tf.data.Dataset.from_generator(built_gen, (tf.int64, tf.int64), output_shapes=(k,seq_length+1,))
         nd = nd.repeat()
 
         # For training, we want a lot of parallel reading and shuffling.
