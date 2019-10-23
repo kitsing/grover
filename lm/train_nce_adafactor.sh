@@ -10,8 +10,8 @@ save_checkpoint_steps=1000
 # You can customize the training here
 # mega, medium, or base
 model_type="base"
-OUTPUT_DIR="gs://" # put your output directory here
-input_file="gs://" # put your input files here, it can also be something like "*.tfrecord"
+OUTPUT_DIR="/checkpoint/kitsing/grover-models/discriminator" # put your output directory here
+input_file="/checkpoint/kitsing/grover/tfrecords/*.tfrecord" # put your input files here, it can also be something like "*.tfrecord"
 
 if [ ${model_type} == "base" ]; then
     num_tpu_cores=32
@@ -42,7 +42,6 @@ python train.py \
     --num_warmup_steps=10000 \
     --save_checkpoints_steps=${save_checkpoint_steps} \
     --iterations_per_loop=${save_checkpoint_steps} \
-    --use_tpu=True \
-    --tpu_name=$(hostname) \
+    --use_tpu=False \
     --num_tpu_cores=$num_tpu_cores \
     --init_checkpoint=${init_checkpoint}
