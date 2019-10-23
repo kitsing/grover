@@ -466,10 +466,9 @@ class GroverModelResidual(object):
             self.config.attention_probs_dropout_prob = 0.0
 
         # autoencoder-like architecture
-        self.batch_size, self.seq_length = get_shape_list(input_ids, 2)
-
-        self.flattened_noises = tf.reshape(noises, (-1, self.seq_length))
+        self.flattened_noises = tf.reshape(noises, (-1, noises.shape[2]))
         self.input_ids = tf.concat((input_ids, self.flattened_noises), axis=0)
+        self.batch_size, self.seq_length = get_shape_list(self.input_ids, 2)
 
         if cache is None:
             caches = [None] * config.num_hidden_layers
@@ -537,6 +536,7 @@ class GroverModelResidual(object):
 
     def total_loss(self):
         if self.alpha == 1.:
+            assert len(self.residuals.shape) == 2
             total_loss = - (self.residuals[:, 0] - tf.reduce_logsumexp(self.residuals, axis=1))
             return tf.reduce_mean(total_loss, axis=0)
         else:
