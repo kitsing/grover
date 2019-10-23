@@ -468,7 +468,7 @@ class GroverModelResidual(object):
         # autoencoder-like architecture
         self.k = noises.shape[1]
         concatenated = tf.concat((input_ids[:, None, :], noises), axis=1)
-        self.input_ids = concatenated.reshape((-1, concatenated.shape[2]))
+        self.input_ids = tf.reshape(concatenated, (-1, concatenated.shape[2]))
         self.batch_size, self.seq_length = get_shape_list(self.input_ids, 2)
 
         if cache is None:
