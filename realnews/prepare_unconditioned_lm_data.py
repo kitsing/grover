@@ -67,6 +67,8 @@ parser.add_argument(
 )
 
 args = parser.parse_args()
+import os
+args.fold = int(os.environ['SLURM_PROCID'])
 random.seed(args.seed + args.fold)
 
 encoder = get_encoder()
