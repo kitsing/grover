@@ -182,11 +182,10 @@ with S3TFRecordWriter(train_file) as train_writer, S3TFRecordWriter(val_file) as
 
         # DEBUG
         if article['inst_index'] < 5:
-            print("~~~\nSubindex{}. Index {}. ARTICLE: {}\n---\nTokens: {}\n\n".format(article['sub_index'],
-                                                                                       article['inst_index'],
-                                                                                       detokenize(encoder,
-                                                                                                  article['input_ids']),
-                                                                                       article['input_ids']),
+            print("~~~\nIndex {}. ARTICLE: {}\n---\nTokens: {}\n\n".format(article['inst_index'],
+                                                                           detokenize(encoder,
+                                                                                      article['input_ids']),
+                                                                           article['input_ids']),
                   flush=True)
         if article['inst_index'] % 1000 == 0:
             print("{} articles, {} written".format(article['inst_index'], total_written), flush=True)
