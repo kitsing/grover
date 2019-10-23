@@ -470,7 +470,7 @@ class GroverModelResidual(object):
         concatenated = tf.concat((input_ids[:, None, :], noises), axis=1)
         self.input_ids = tf.reshape(concatenated, (-1, concatenated.shape[2]))
         self.batch_size, self.seq_length = get_shape_list(self.input_ids, 2)
-
+        assert config.max_position_embeddings >= self.seq_length
         if cache is None:
             caches = [None] * config.num_hidden_layers
             self.cache_length = 0
