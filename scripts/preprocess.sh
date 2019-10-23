@@ -21,7 +21,7 @@
 
 MODEL_PATH=/checkpoint/kitsing/grover/tfrecords
 DATA_PATH=/checkpoint/kitsing/realnews_corpus/realnews/realnews.jsonl
-NUM_FOLDS=1024
+NUM_FOLDS=${SLURM_NTASKS}
 ON_CLUSTER=1
 
 mkdir -p "${MODEL_PATH}"

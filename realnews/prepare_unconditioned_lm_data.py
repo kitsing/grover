@@ -167,6 +167,7 @@ def unbuffered_and_sliding_window_article_iterator(encoder, final_desired_size=1
 total_written = 0
 train_file = args.base_fn + 'train{:04d}.tfrecord'.format(args.fold)
 val_file = args.base_fn + 'val{:04d}.tfrecord'.format(args.fold)
+print('train: {} val: {}'.format(train_file, val_file))
 with S3TFRecordWriter(train_file) as train_writer, S3TFRecordWriter(val_file) as val_writer:
     for article in unbuffered_and_sliding_window_article_iterator(encoder,
                                                                   final_desired_size=max(args.max_seq_length + 1, 1025)):
@@ -181,12 +182,12 @@ with S3TFRecordWriter(train_file) as train_writer, S3TFRecordWriter(val_file) as
         total_written += 1
 
         # DEBUG
-        if article['inst_index'] < 5:
-            print("~~~\nIndex {}. ARTICLE: {}\n---\nTokens: {}\n\n".format(article['inst_index'],
-                                                                           detokenize(encoder,
-                                                                                      article['input_ids']),
-                                                                           article['input_ids']),
-                  flush=True)
-        if article['inst_index'] % 1000 == 0:
-            print("{} articles, {} written".format(article['inst_index'], total_written), flush=True)
+        # if article['inst_index'] < 5:
+        #     print("~~~\nIndex {}. ARTICLE: {}\n---\nTokens: {}\n\n".format(article['inst_index'],
+        #                                                                    detokenize(encoder,
+        #                                                                               article['input_ids']),
+        #                                                                    article['input_ids']),
+        #           flush=True)
+        # if article['inst_index'] % 1000 == 0:
+        #     print("{} articles, {} written".format(article['inst_index'], total_written), flush=True)
 print("DONE UPLOADING", flush=True)
