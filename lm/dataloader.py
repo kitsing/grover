@@ -31,10 +31,10 @@ def _decode_record(record, name_to_features):
     return example
 
 
-def _decode_record_with_noise(record, name_to_features, noise_name_to_features):
+def _decode_record_with_noise(record, noise, name_to_features, noise_name_to_features):
     """Decodes a record to a TensorFlow example."""
-    example = tf.parse_single_example(record[0], name_to_features)
-    noise_example = tf.parse_single_example(record[1], noise_name_to_features)
+    example = tf.parse_single_example(record, name_to_features)
+    noise_example = tf.parse_single_example(noise, noise_name_to_features)
     # tf.Example only supports tf.int64, but the TPU only supports tf.int32.
     # So cast all int64 to int32.
     for name in list(example.keys()):
@@ -117,10 +117,12 @@ def nce_input_fn_builder(input_files, noise_files, k,
         # every sample.
         d = d.apply(
             tf.data.experimental.map_and_batch(
-                lambda record: _decode_record_with_noise(record, name_to_features, noise_name_to_features),
+                lambda record, noise: _decode_record_with_noise(record, noise,
+                                                                name_to_features, noise_name_to_features),
                 batch_size=batch_size,
                 num_parallel_batches=num_cpu_threads,
                 drop_remainder=True))
+        print(d)
         return d
 
     def parallel_interleave_shuffle(input_files):
