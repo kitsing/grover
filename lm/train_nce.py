@@ -155,7 +155,7 @@ def main(_):
 
     tf.logging.info("***** Running training *****")
     tf.logging.info("  Batch size = %d", FLAGS.train_batch_size)
-    train_input_fn = nce_input_fn_builder(k=k,
+    train_input_fn = nce_input_fn_builder(k=FLAGS.k,
         input_files=input_files, noise_files=noise_files,
         seq_length=FLAGS.max_seq_length,
         is_training=True)
