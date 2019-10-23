@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-export PYTHONPATH=/home/rowanz/code/fakenewslm
+export PYTHONPATH=$(pwd)
 
 learning_rate=1e-4
 init_checkpoint=""
@@ -12,6 +12,7 @@ save_checkpoint_steps=1000
 model_type="base"
 OUTPUT_DIR="/checkpoint/kitsing/grover-models/discriminator" # put your output directory here
 input_file="/checkpoint/kitsing/grover/tfrecords/*.tfrecord" # put your input files here, it can also be something like "*.tfrecord"
+noise_file="/checkpoint/kitsing/grover/unconditional_samples/*.npz" # put your input files here, it can also be something like "*.tfrecord"
 
 if [ ${model_type} == "base" ]; then
     num_tpu_cores=32
@@ -31,9 +32,10 @@ num_train_steps=800000
 # Make sure batch size scales.
 let batch_size="$batch_size_per_core * $num_tpu_cores"
 
-python train.py \
-    --config_file=configs/${model_type}.json \
+python lm/train_nce.py \
+    --config_file=lm/configs/${model_type}.json \
     --input_file=${input_file} \
+    --noise_file=${noise_file} \
     --output_dir=${OUTPUT_DIR} \
     --max_seq_length=${max_seq_length} \
     --train_batch_size=${batch_size} \

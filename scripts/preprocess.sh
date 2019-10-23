@@ -12,8 +12,9 @@
 ## partition name
 #SBATCH --partition=learnfair
 ## number of nodes
-#SBATCH --nodes=64
-#SBATCH --ntasks-per-node=16
+#SBATCH --nodes=32
+#SBATCH --ntasks-per-node=32
+#SBATCH --ntasks=1024
 #SBATCH --time=2880
 #SBATCH --signal=USR1@180 #Signal is sent to batch script itself
 ## number of tasks per node
