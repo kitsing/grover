@@ -127,8 +127,7 @@ with tf.Session(config=tf_config, graph=tf.Graph()) as sess, \
 
     # Let's go!
     for batch in tqdm(range(num_chunks), disable=None):
-        context_formatted = []
-        context_formatted.append(encoder.__dict__['begin_article'])
+        context_formatted = [encoder.__dict__['begin_article'],]
 
         # Indices we definitely DONT WANT TO PREDICT
         ignore_ids_np = np.array(encoder.special_tokens_onehot)

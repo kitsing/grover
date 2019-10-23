@@ -31,12 +31,52 @@ def _decode_record(record, name_to_features):
     return example
 
 
-def nce_input_fn_builder(input_files,
+def _decode_record_with_noise(record, name_to_features, noise_name_to_features):
+    """Decodes a record to a TensorFlow example."""
+    example = tf.parse_single_example(record[0], name_to_features)
+    noise_example = tf.parse_single_example(record[1], noise_name_to_features)
+    # tf.Example only supports tf.int64, but the TPU only supports tf.int32.
+    # So cast all int64 to int32.
+    for name in list(example.keys()):
+        t = example[name]
+        if t.dtype == tf.int64:
+            t = tf.cast(t, tf.int32)
+        example[name] = t
+    for name in noise_example.keys():
+        example[name] = noise_example[name]
+    return example
+
+
+def nce_input_fn_builder(input_files, noise_files,
                          seq_length,
                          is_training,
                          num_cpu_threads=4,
                          evaluate_for_fixed_number_of_steps=True):
     """Creates an `input_fn` closure to be passed to TPUEstimator."""
+
+    def build_gen(np_filenames, batch_size):
+        import numpy as np
+        def gen():
+            fname_list = list(np_filenames)
+            from random import shuffle
+            shuffle(fname_list)
+            for np_filename in fname_list:
+                with np.load(np_filename) as loaded:
+                    s = loaded['tokens']
+                    s = s[(s == 50266).argmax(axis=1) > 0] # filter out rows where we cannot find an EOS symbol
+                    np.random.shuffle(s)
+                    truncated_num_of_rows = s.shape[0] - s.shape[0] % batch_size
+                    # discard portions where we cannot make into a batch
+                    if len(truncated_num_of_rows) == 0:
+                        # TODO raise error if there are no viable batches
+                        continue
+                    s = s[:truncated_num_of_rows]
+                    # mask out symbols past EOS
+                    mask = np.arange(s.shape[1])[None, :] <= (s == 50266).argmax(axis=1)[:, None]
+                    masked = s * mask
+
+                    for b in range(s.shape[0] / batch_size):
+                        yield masked[b*batch_size:(b+1)*batch_size]
 
     def input_fn(params):
         """The actual input function."""
@@ -44,29 +84,21 @@ def nce_input_fn_builder(input_files,
         k = params['k']
         name_to_features = {
             "input_ids": tf.FixedLenFeature([seq_length + 1], tf.int64),
-            'input_probs': tf.FixedLenFeature((1,), dtype=tf.float32),
+        }
+
+        noise_name_to_features = {
             'noises': tf.FixedLenFeature((k, seq_length + 1), tf.int64),
             'noise_probs': tf.FixedLenFeature((k,), dtype=tf.float32)
         }
 
+        built_gen = build_gen(noise_files, k)
+        nd = tf.data.Dataset.from_generator(built_gen, (tf.int64,), output_shapes=(k,seq_length+1,))
+        nd = nd.repeat()
+
         # For training, we want a lot of parallel reading and shuffling.
         # For eval, we want no shuffling and parallel reading doesn't matter.
         if is_training:
-            d = tf.data.Dataset.from_tensor_slices(tf.constant(input_files))
-            d = d.repeat()
-            d = d.shuffle(buffer_size=len(input_files))
-
-            # `cycle_length` is the number of parallel files that get read.
-            cycle_length = min(num_cpu_threads, len(input_files))
-
-            # `sloppy` mode means that the interleaving is not exact. This adds
-            # even more randomness to the training pipeline.
-            d = d.apply(
-                tf.data.experimental.parallel_interleave(
-                    tf.data.TFRecordDataset,
-                    sloppy=is_training,
-                    cycle_length=cycle_length))
-            d = d.shuffle(buffer_size=100)
+            d = parallel_interleave_shuffle(input_files)
         else:
             d = tf.data.TFRecordDataset(input_files)
             # If we evaluate for a fixed number of steps we don't want to encounter
@@ -74,16 +106,35 @@ def nce_input_fn_builder(input_files,
             if evaluate_for_fixed_number_of_steps:
                 d = d.repeat()
 
+        # zip with the noise dataset
+        d = tf.data.Dataset.zip((d, nd))
+
         # We must `drop_remainder` on training because the TPU requires fixed
         # size dimensions. For eval, we assume we are evaluating on the CPU or GPU
         # and we *don't* want to drop the remainder, otherwise we wont cover
         # every sample.
         d = d.apply(
             tf.data.experimental.map_and_batch(
-                lambda record: _decode_record(record, name_to_features),
+                lambda record: _decode_record_with_noise(record, name_to_features, noise_name_to_features),
                 batch_size=batch_size,
                 num_parallel_batches=num_cpu_threads,
                 drop_remainder=True))
+        return d
+
+    def parallel_interleave_shuffle(input_files):
+        d = tf.data.Dataset.from_tensor_slices(tf.constant(input_files))
+        d = d.repeat()
+        d = d.shuffle(buffer_size=len(input_files))
+        # `cycle_length` is the number of parallel files that get read.
+        cycle_length = min(num_cpu_threads, len(input_files))
+        # `sloppy` mode means that the interleaving is not exact. This adds
+        # even more randomness to the training pipeline.
+        d = d.apply(
+            tf.data.experimental.parallel_interleave(
+                tf.data.TFRecordDataset,
+                sloppy=is_training,
+                cycle_length=cycle_length))
+        d = d.shuffle(buffer_size=100)
         return d
 
     return input_fn

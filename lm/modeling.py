@@ -700,7 +700,7 @@ class GroverModel(object):
 
 
 def model_fn_builder(config: GroverConfig, init_checkpoint, learning_rate,
-                     num_train_steps, num_warmup_steps, use_tpu, build_residual: bool = False):
+                     num_train_steps, num_warmup_steps, use_tpu):
     """Returns `model_fn` closure for TPUEstimator."""
 
     def model_fn(features, labels, mode, params):  # pylint: disable=unused-argument
@@ -714,21 +714,13 @@ def model_fn_builder(config: GroverConfig, init_checkpoint, learning_rate,
 
         is_training = (mode == tf.estimator.ModeKeys.TRAIN)
 
-        if build_residual:
-            model = GroverModelResidual(
-                config=config,
-                is_training=is_training,
-                input_ids=input_ids,
-                pad_token_id=config.pad_token_id,
-            )
-        else:
-            model = GroverModel(
-                config=config,
-                is_training=is_training,
-                input_ids=input_ids,
-                pad_token_id=config.pad_token_id,
-                chop_off_last_token=True,
-            )
+        model = GroverModel(
+            config=config,
+            is_training=is_training,
+            input_ids=input_ids,
+            pad_token_id=config.pad_token_id,
+            chop_off_last_token=True,
+        )
 
         total_loss = model.lm_loss()
 
@@ -922,35 +914,7 @@ def nce_model_fn_builder(config: GroverConfig, init_checkpoint, learning_rate,
                 eval_metrics=eval_metrics,
                 scaffold_fn=scaffold_fn)
         else:
-            gt_logprobs = tf.squeeze(tf.batch_gather(model.log_probs, model.target_ids[:, :, None]), axis=2)
-
-            # Need top-p required under topp sampling!
-            better_than_gt = model.log_probs > gt_logprobs[:, :, None]
-            top_p_required = tf.reduce_sum(tf.cast(better_than_gt, tf.float32) * tf.exp(model.log_probs), axis=2)
-
-            # No top-p sampling for now, since this seems to be too slow on TPUs
-            if use_tpu:
-                predictions = tf.reshape(
-                    tf.random.categorical(logits=model.logits_flat, num_samples=1),
-                    get_shape_list(model.target_ids),
-                )
-            else:
-                # Argmax
-                # predictions = tf.math.argmax(model.log_probs, axis=-1, output_type=tf.int32)
-                predictions = tf.reshape(
-                    _top_p_sample(model.logits_flat, num_samples=1, p=0.99)['sample'],
-                    get_shape_list(model.target_ids),
-                )
-            pred_logprobs = tf.squeeze(tf.batch_gather(model.log_probs, predictions[:, :, None]), axis=2)
-
-            output_spec = tf.contrib.tpu.TPUEstimatorSpec(
-                mode=mode,
-                predictions={'gt_logprobs': gt_logprobs,
-                             'top_p_required': top_p_required,
-                             'predictions': predictions,
-                             'pred_logprobs': pred_logprobs,
-                             'labels': input_ids},
-                scaffold_fn=scaffold_fn)
+            raise NotImplementedError
         return output_spec
 
     return model_fn

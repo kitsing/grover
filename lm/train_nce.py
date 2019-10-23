@@ -35,6 +35,10 @@ flags.DEFINE_string(
     "Input TF example files (can be a glob or comma separated).")
 
 flags.DEFINE_string(
+    "noise_file", None,
+    "Input noise files (can be a glob or comma separated).")
+
+flags.DEFINE_string(
     "output_dir", None,
     "The output directory where the model checkpoints will be written.")
 
@@ -103,6 +107,10 @@ def main(_):
     for input_pattern in FLAGS.input_file.split(","):
         input_files.extend(tf.gfile.Glob(input_pattern))
 
+    noise_files = []
+    for noise_pattern in FLAGS.noise_file.split(","):
+        noise_files.extend(tf.gfile.Glob(noise_pattern))
+
     tf.logging.info("*** Input Files ***")
     for input_file in input_files:
         tf.logging.info("  %s" % input_file)
@@ -145,7 +153,7 @@ def main(_):
     tf.logging.info("***** Running training *****")
     tf.logging.info("  Batch size = %d", FLAGS.train_batch_size)
     train_input_fn = nce_input_fn_builder(
-        input_files=input_files,
+        input_files=input_files, noise_files=noise_files,
         seq_length=FLAGS.max_seq_length,
         is_training=True)
 
