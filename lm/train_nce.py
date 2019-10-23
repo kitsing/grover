@@ -103,7 +103,7 @@ def main(_):
     tf.logging.set_verbosity(tf.logging.INFO)
 
     news_config = GroverConfig.from_json_file(FLAGS.config_file)
-
+    print(news_config)
     tf.gfile.MakeDirs(FLAGS.output_dir)
 
     input_files = []
@@ -115,8 +115,8 @@ def main(_):
         noise_files.extend(tf.gfile.Glob(noise_pattern))
 
     tf.logging.info("*** Input Files ***")
-    for input_file in input_files:
-        tf.logging.info("  %s" % input_file)
+    # for input_file in input_files:
+    #     tf.logging.info("  %s" % input_file)
 
     tpu_cluster_resolver = None
     if FLAGS.use_tpu and FLAGS.tpu_name:

@@ -97,6 +97,9 @@ class GroverConfig(object):
         """Serializes this instance to a JSON string."""
         return json.dumps(self.to_dict(), indent=2, sort_keys=True) + "\n"
 
+    def __str__(self):
+        return str(self.__dict__)
+
 
 def mask_attention_for_ltr(attention_scores, attention_mask):
     """
