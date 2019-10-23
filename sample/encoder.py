@@ -314,6 +314,12 @@ def create_int_feature(values):
     return feature
 
 
+def just_pad(article, max_seq_length, pad_token):
+    amount_to_pad = max_seq_length - len(article['input_ids'])
+    article['input_ids'].extend([pad_token] * amount_to_pad)
+    return article
+
+
 def sliding_window(article, max_seq_length, pad_token):
     """
     Randomly sample some spans. It's a simple approximation of sliding window
