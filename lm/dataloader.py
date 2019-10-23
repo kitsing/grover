@@ -47,7 +47,7 @@ def _decode_record_with_noise(record, name_to_features, noise_name_to_features):
     return example
 
 
-def nce_input_fn_builder(input_files, noise_files,
+def nce_input_fn_builder(input_files, noise_files, k,
                          seq_length,
                          is_training,
                          num_cpu_threads=4,
@@ -81,7 +81,6 @@ def nce_input_fn_builder(input_files, noise_files,
     def input_fn(params):
         """The actual input function."""
         batch_size = params["batch_size"]
-        k = params['k']
         name_to_features = {
             "input_ids": tf.FixedLenFeature([seq_length + 1], tf.int64),
         }

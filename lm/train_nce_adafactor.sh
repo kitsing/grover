@@ -6,6 +6,7 @@ learning_rate=1e-4
 init_checkpoint=""
 max_seq_length=1024
 save_checkpoint_steps=1000
+K=5
 
 # You can customize the training here
 # mega, medium, or base
@@ -46,4 +47,5 @@ python lm/train_nce.py \
     --iterations_per_loop=${save_checkpoint_steps} \
     --use_tpu=False \
     --num_tpu_cores=$num_tpu_cores \
-    --init_checkpoint=${init_checkpoint}
+    --init_checkpoint=${init_checkpoint} \
+    --k=${K}

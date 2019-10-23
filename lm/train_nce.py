@@ -95,6 +95,9 @@ flags.DEFINE_integer(
     "num_tpu_cores", 8,
     "Only used if `use_tpu` is True. Total number of TPU cores to use.")
 
+flags.DEFINE_integer(
+    "k", 5,
+    "k value of NCE.")
 
 def main(_):
     tf.logging.set_verbosity(tf.logging.INFO)
@@ -152,7 +155,7 @@ def main(_):
 
     tf.logging.info("***** Running training *****")
     tf.logging.info("  Batch size = %d", FLAGS.train_batch_size)
-    train_input_fn = nce_input_fn_builder(
+    train_input_fn = nce_input_fn_builder(k=k,
         input_files=input_files, noise_files=noise_files,
         seq_length=FLAGS.max_seq_length,
         is_training=True)
