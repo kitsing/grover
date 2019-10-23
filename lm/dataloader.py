@@ -56,6 +56,7 @@ def nce_input_fn_builder(input_files, noise_files, k,
 
     def build_gen(np_filenames, batch_size):
         import numpy as np
+
         def gen():
             fname_list = list(np_filenames)
             from random import shuffle
@@ -77,6 +78,8 @@ def nce_input_fn_builder(input_files, noise_files, k,
 
                     for b in range(s.shape[0] / batch_size):
                         yield masked[b*batch_size:(b+1)*batch_size]
+
+        return gen
 
     def input_fn(params):
         """The actual input function."""
