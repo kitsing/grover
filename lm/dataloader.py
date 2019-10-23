@@ -42,8 +42,7 @@ def _decode_record_with_noise(record, noise, name_to_features, noise_name_to_fea
         if t.dtype == tf.int64:
             t = tf.cast(t, tf.int32)
         example[name] = t
-    for name in noise_example.keys():
-        example[name] = noise_example[name]
+    example['noise'] = noise_example
     return example
 
 
