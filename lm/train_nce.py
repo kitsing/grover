@@ -143,8 +143,6 @@ def main(_):
         model_fn=model_fn,
         config=tf.estimator.RunConfig(session_config=run_config),
         model_dir=model_dir,
-        train_batch_size=FLAGS.train_batch_size,
-        eval_batch_size=FLAGS.train_batch_size,
         params={'model_dir': FLAGS.output_dir}
     )
     bcast_hook = hvd.BroadcastGlobalVariablesHook(0)
