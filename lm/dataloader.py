@@ -51,12 +51,14 @@ def nce_input_fn_builder(input_files, noise_files, k,
                          num_cpu_threads=4,
                          evaluate_for_fixed_number_of_steps=True):
     """Creates an `input_fn` closure to be passed to TPUEstimator."""
-
+    import horovod.tensorflow as hvd
+    from sample.encoder import get_encoder
+    encoder = get_encoder()
+    end_symbol = encoder.__dict__['end_article']
     def build_gen(np_filenames, batch_size):
         import numpy as np
 
         def pad_along_axis(array: np.ndarray, target_length, axis=0):
-
             pad_size = target_length - array.shape[axis]
             axis_nb = len(array.shape)
 
@@ -86,7 +88,7 @@ def nce_input_fn_builder(input_files, noise_files, k,
                 np_filename = fname_list.pop()
                 with np.load(np_filename) as loaded:
                     s = loaded['tokens']
-                    s = s[(s == 50266).argmax(axis=1) > 0] # filter out rows where we cannot find an EOS symbol
+                    s = s[(s == end_symbol).argmax(axis=1) > 0] # filter out rows where we cannot find an EOS symbol
                     np.random.shuffle(s)
                     s = pad_along_axis(s, seq_length + 1, 1)
                     truncated_num_of_rows = s.shape[0] - s.shape[0] % batch_size
@@ -99,8 +101,9 @@ def nce_input_fn_builder(input_files, noise_files, k,
                     s = s[:truncated_num_of_rows]
                     # mask out symbols past EOS
                     mask = np.arange(s.shape[1])[None, :] <= (s == 50266).argmax(axis=1)[:, None]
-                    masked = s * mask
-
+                    masked: np.ndarray = s * mask
+                    if hvd.rank() == 0:
+                        print(encoder.decode(masked[0].tolist()))
                     for b in range(int(s.shape[0] / batch_size)):
                         yield masked[b*batch_size:(b+1)*batch_size]
 
