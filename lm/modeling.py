@@ -864,18 +864,10 @@ def nce_model_fn_builder(config: GroverConfig, init_checkpoint, learning_rate,
             tvars = tf.trainable_variables()
 
         initialized_variable_names = {}
-        scaffold_fn = None
         if init_checkpoint:
             (assignment_map, initialized_variable_names
              ) = get_assignment_map_from_checkpoint(tvars, init_checkpoint)
-            if use_tpu:
-                def tpu_scaffold():
-                    tf.train.init_from_checkpoint(init_checkpoint, assignment_map)
-                    return tf.train.Scaffold()
-
-                scaffold_fn = tpu_scaffold
-            else:
-                tf.train.init_from_checkpoint(init_checkpoint, assignment_map)
+            tf.train.init_from_checkpoint(init_checkpoint, assignment_map)
 
         tf.logging.info("**** Trainable Variables ****")
         for var in tvars:
@@ -894,7 +886,7 @@ def nce_model_fn_builder(config: GroverConfig, init_checkpoint, learning_rate,
                     train_op=train_op,
                     host_call=construct_scalar_host_call(metric_dict=train_metrics, model_dir=params['model_dir'],
                                                          prefix='training/'),
-                    scaffold_fn=scaffold_fn)
+                    )
             else:
                 output_spec = tf.estimator.EstimatorSpec(
                     mode=mode,
@@ -902,7 +894,7 @@ def nce_model_fn_builder(config: GroverConfig, init_checkpoint, learning_rate,
                     train_op=train_op,
                     training_hooks=[
                         tf.train.LoggingTensorHook({'loss': tf.metrics.mean(total_loss)[1]}, every_n_iter=100)],
-                    scaffold_fn=scaffold_fn)
+                    )
 
         elif mode == tf.estimator.ModeKeys.EVAL:
             def metric_fn(total_loss):
@@ -917,7 +909,7 @@ def nce_model_fn_builder(config: GroverConfig, init_checkpoint, learning_rate,
                 mode=mode,
                 loss=total_loss,
                 eval_metrics=eval_metrics,
-                scaffold_fn=scaffold_fn)
+                )
         else:
             raise NotImplementedError
         return output_spec
