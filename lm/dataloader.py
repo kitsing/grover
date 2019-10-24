@@ -88,7 +88,7 @@ def nce_input_fn_builder(input_files, noise_files, k,
                     s = loaded['tokens']
                     s = s[(s == 50266).argmax(axis=1) > 0] # filter out rows where we cannot find an EOS symbol
                     np.random.shuffle(s)
-                    s = pad_along_axis(s, seq_length, 1)
+                    s = pad_along_axis(s, seq_length + 1, 1)
                     truncated_num_of_rows = s.shape[0] - s.shape[0] % batch_size
                     # discard portions where we cannot make into a batch
                     remainder.append(s[truncated_num_of_rows:])
