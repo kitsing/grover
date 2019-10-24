@@ -108,7 +108,8 @@ def nce_input_fn_builder(input_files, noise_files, k,
 
     def input_fn(params):
         """The actual input function."""
-        batch_size = params["batch_size"]
+        # batch_size = params["batch_size"]
+        batch_size = 2
         name_to_features = {
             "input_ids": tf.FixedLenFeature([seq_length + 1], tf.int64),
         }
