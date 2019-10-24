@@ -143,7 +143,7 @@ def main(_):
         model_fn=model_fn,
         config=tf.estimator.RunConfig(session_config=run_config),
         model_dir=model_dir,
-        params={'model_dir': FLAGS.output_dir}
+        params={'model_dir': model_dir}
     )
     bcast_hook = hvd.BroadcastGlobalVariablesHook(0)
 
