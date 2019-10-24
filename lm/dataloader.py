@@ -55,17 +55,44 @@ def nce_input_fn_builder(input_files, noise_files, k,
     def build_gen(np_filenames, batch_size):
         import numpy as np
 
+        def pad_along_axis(array: np.ndarray, target_length, axis=0):
+
+            pad_size = target_length - array.shape[axis]
+            axis_nb = len(array.shape)
+
+            if pad_size < 0:
+                return array
+
+            npad = [(0, 0) for x in range(axis_nb)]
+            npad[axis] = (0, pad_size)
+
+            b = np.pad(array, pad_width=npad, mode='constant', constant_values=0)
+
+            return b
+
         def gen():
             fname_list = list(np_filenames)
             from random import shuffle
             shuffle(fname_list)
-            for np_filename in fname_list:
+            remainder = []
+            remainder_len = 0
+            while len(fname_list) > 0:
+                while remainder_len >= batch_size:
+                    concat = np.concatenate(remainder, axis=0)
+                    to_yield = concat[:batch_size]
+                    remainder = [concat[batch_size:]]
+                    remainder_len = remainder[0].shape[0]
+                    yield to_yield
+                np_filename = fname_list.pop()
                 with np.load(np_filename) as loaded:
                     s = loaded['tokens']
                     s = s[(s == 50266).argmax(axis=1) > 0] # filter out rows where we cannot find an EOS symbol
                     np.random.shuffle(s)
+                    s = pad_along_axis(s, seq_length, 1)
                     truncated_num_of_rows = s.shape[0] - s.shape[0] % batch_size
                     # discard portions where we cannot make into a batch
+                    remainder.append(s[truncated_num_of_rows:])
+                    remainder_len = remainder_len + s.shape[0] % batch_size
                     if truncated_num_of_rows == 0:
                         # TODO raise error if there are no viable batches
                         continue

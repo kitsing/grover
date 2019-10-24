@@ -471,7 +471,7 @@ class GroverModelResidual(object):
         # autoencoder-like architecture
         self.k = noises.shape[1]
         concatenated = tf.concat((input_ids[:, None, :], noises), axis=1)
-        self.input_ids = tf.reshape(concatenated, (-1, concatenated.shape[2]))
+        self.input_ids = tf.reshape(concatenated, (-1, concatenated.shape[2]))[:, 1:]
         self.batch_size, self.seq_length = get_shape_list(self.input_ids, 2)
         assert config.max_position_embeddings >= self.seq_length
         if cache is None:
@@ -830,6 +830,7 @@ def model_fn_builder(config: GroverConfig, init_checkpoint, learning_rate,
 def nce_model_fn_builder(config: GroverConfig, init_checkpoint, learning_rate,
                          num_train_steps, num_warmup_steps, use_tpu):
     """Returns `model_fn` closure for TPUEstimator."""
+    import horovod.tensorflow as hvd
 
     def model_fn(features, labels, mode, params):  # pylint: disable=unused-argument
         """The `model_fn` for TPUEstimator."""
@@ -855,7 +856,7 @@ def nce_model_fn_builder(config: GroverConfig, init_checkpoint, learning_rate,
 
         if is_training:
             train_op, train_metrics = optimization_adafactor.create_optimizer(
-                total_loss, learning_rate, num_train_steps, num_warmup_steps, use_tpu)
+                total_loss, learning_rate, num_train_steps, num_warmup_steps)
             tvars = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES)
         else:
             train_op = None

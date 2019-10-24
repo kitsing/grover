@@ -15,9 +15,10 @@
 import re
 import tensorflow as tf
 from lm.utils import get_shape_list
+import horovod.tensorflow as hvd
 
 
-def create_optimizer(loss, init_lr, num_train_steps, num_warmup_steps, use_tpu):
+def create_optimizer(loss, init_lr, num_train_steps, num_warmup_steps):
     """Creates an optimizer training op."""
     global_step = tf.train.get_or_create_global_step()
 
@@ -59,8 +60,7 @@ def create_optimizer(loss, init_lr, num_train_steps, num_warmup_steps, use_tpu):
         epsilon=1e-6,
         exclude_from_weight_decay=["LayerNorm", "layer_norm", "bias"])
 
-    if use_tpu:
-        optimizer = tf.contrib.tpu.CrossShardOptimizer(optimizer)
+    optimizer = hvd.DistributedOptimizer(optimizer)
 
     tvars = tf.trainable_variables()
     grads = tf.gradients(loss, tvars)

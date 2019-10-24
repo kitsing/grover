@@ -14,11 +14,16 @@
 # limitations under the License.
 
 """ Training script! """
+import horovod.tensorflow as hvd
 
 import tensorflow as tf
 
 from lm.dataloader import nce_input_fn_builder
 from lm.modeling import nce_model_fn_builder, GroverConfig
+
+# init hvd
+hvd.init()
+
 
 flags = tf.flags
 
@@ -99,6 +104,7 @@ flags.DEFINE_integer(
     "k", 5,
     "k value of NCE.")
 
+
 def main(_):
     tf.logging.set_verbosity(tf.logging.INFO)
 
@@ -118,22 +124,11 @@ def main(_):
     # for input_file in input_files:
     #     tf.logging.info("  %s" % input_file)
 
-    tpu_cluster_resolver = None
-    if FLAGS.use_tpu and FLAGS.tpu_name:
-        tpu_cluster_resolver = tf.contrib.cluster_resolver.TPUClusterResolver(
-            FLAGS.tpu_name, zone=FLAGS.tpu_zone, project=FLAGS.gcp_project)
+    run_config = tf.ConfigProto()
+    run_config.gpu_options.allow_growth = True
+    run_config.gpu_options.visible_device_list = str(hvd.local_rank())
 
-    is_per_host = tf.contrib.tpu.InputPipelineConfig.PER_HOST_V2
-    run_config = tf.contrib.tpu.RunConfig(
-        cluster=tpu_cluster_resolver,
-        master=FLAGS.master,
-        model_dir=FLAGS.output_dir,
-        save_checkpoints_steps=FLAGS.save_checkpoints_steps,
-        keep_checkpoint_max=None,
-        tpu_config=tf.contrib.tpu.TPUConfig(
-            iterations_per_loop=FLAGS.iterations_per_loop,
-            num_shards=FLAGS.num_tpu_cores,
-            per_host_input_for_training=is_per_host))
+    model_dir = FLAGS.output_dir if hvd.rank() == 0 else None
 
     model_fn = nce_model_fn_builder(news_config, init_checkpoint=FLAGS.init_checkpoint,
                                     learning_rate=FLAGS.learning_rate,
@@ -144,23 +139,28 @@ def main(_):
 
     # If TPU is not available, this will fall back to normal Estimator on CPU
     # or GPU.
-    estimator = tf.contrib.tpu.TPUEstimator(
-        use_tpu=FLAGS.use_tpu,
+    estimator = tf.estimator.Estimator(
         model_fn=model_fn,
-        config=run_config,
+        config=tf.estimator.RunConfig(session_config=run_config),
+        model_dir=model_dir,
         train_batch_size=FLAGS.train_batch_size,
         eval_batch_size=FLAGS.train_batch_size,
         params={'model_dir': FLAGS.output_dir}
     )
+    bcast_hook = hvd.BroadcastGlobalVariablesHook(0)
 
     tf.logging.info("***** Running training *****")
     tf.logging.info("  Batch size = %d", FLAGS.train_batch_size)
     train_input_fn = nce_input_fn_builder(k=FLAGS.k,
-        input_files=input_files, noise_files=noise_files,
-        seq_length=FLAGS.max_seq_length,
-        is_training=True)
+                                          input_files=input_files,
+                                          noise_files=noise_files,
+                                          seq_length=FLAGS.max_seq_length,
+                                          is_training=True)
 
-    estimator.train(input_fn=train_input_fn, max_steps=FLAGS.num_train_steps)
+    estimator.train(input_fn=train_input_fn, max_steps=FLAGS.num_train_steps // hvd.size(),
+                    hooks=[bcast_hook,]
+                    )
+
 
 if __name__ == "__main__":
     flags.mark_flag_as_required("input_file")
