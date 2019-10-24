@@ -888,7 +888,7 @@ def nce_model_fn_builder(config: GroverConfig, init_checkpoint, learning_rate,
         output_spec = None
         if mode == tf.estimator.ModeKeys.TRAIN:
             if use_tpu:
-                output_spec = tf.contrib.tpu.TPUEstimatorSpec(
+                output_spec = tf.estimator.EstimatorSpec(
                     mode=mode,
                     loss=total_loss,
                     train_op=train_op,
@@ -896,7 +896,7 @@ def nce_model_fn_builder(config: GroverConfig, init_checkpoint, learning_rate,
                                                          prefix='training/'),
                     scaffold_fn=scaffold_fn)
             else:
-                output_spec = tf.contrib.tpu.TPUEstimatorSpec(
+                output_spec = tf.estimator.EstimatorSpec(
                     mode=mode,
                     loss=total_loss,
                     train_op=train_op,
@@ -913,7 +913,7 @@ def nce_model_fn_builder(config: GroverConfig, init_checkpoint, learning_rate,
 
             eval_metrics = (metric_fn,
                             [total_loss])
-            output_spec = tf.contrib.tpu.TPUEstimatorSpec(
+            output_spec = tf.estimator.EstimatorSpec(
                 mode=mode,
                 loss=total_loss,
                 eval_metrics=eval_metrics,
