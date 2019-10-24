@@ -120,7 +120,9 @@ def nce_input_fn_builder(input_files, noise_files, k,
         }
 
         built_gen = build_gen(noise_files, k)
-        nd = tf.data.Dataset.from_generator(built_gen, tf.int64, output_shapes=tf.TensorShape([k,seq_length+1]))
+        nd = tf.data.Dataset.from_generator(built_gen,
+                                            tf.int64,
+                                            output_shapes=tf.TensorShape([k, seq_length+1]))
         nd = nd.repeat()
 
         # For training, we want a lot of parallel reading and shuffling.
@@ -144,7 +146,8 @@ def nce_input_fn_builder(input_files, noise_files, k,
         d = d.apply(
             tf.data.experimental.map_and_batch(
                 lambda record, noise: _decode_record_with_noise(record, noise,
-                                                                name_to_features, noise_name_to_features),
+                                                                name_to_features,
+                                                                noise_name_to_features),
                 batch_size=batch_size,
                 num_parallel_batches=num_cpu_threads,
                 drop_remainder=True))

@@ -532,7 +532,7 @@ class GroverModelResidual(object):
         self.new_kvs = tf.stack(new_kvs, axis=1) if do_cache else None
 
         self.residuals = tf.reduce_sum(tf.reshape(self.hidden_state, [self.batch_size, self.k+1, self.seq_length, -1]),
-                                       axis=(1, 2))
+                                       axis=(2, 3))
 
         # THE OUTPUT BIAS DOES NOT SPARK JOY
         # output_bias = tf.get_variable('output_bias', shape=[config.vocab_size], initializer=tf.zeros_initializer())
