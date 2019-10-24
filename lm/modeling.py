@@ -828,7 +828,7 @@ def model_fn_builder(config: GroverConfig, init_checkpoint, learning_rate,
 
 
 def nce_model_fn_builder(config: GroverConfig, init_checkpoint, learning_rate,
-                         num_train_steps, num_warmup_steps, use_tpu):
+                         num_train_steps, num_warmup_steps):
     """Returns `model_fn` closure for TPUEstimator."""
     import horovod.tensorflow as hvd
 
@@ -879,22 +879,13 @@ def nce_model_fn_builder(config: GroverConfig, init_checkpoint, learning_rate,
 
         output_spec = None
         if mode == tf.estimator.ModeKeys.TRAIN:
-            if use_tpu:
-                output_spec = tf.estimator.EstimatorSpec(
-                    mode=mode,
-                    loss=total_loss,
-                    train_op=train_op,
-                    host_call=construct_scalar_host_call(metric_dict=train_metrics, model_dir=params['model_dir'],
-                                                         prefix='training/'),
-                    )
-            else:
-                output_spec = tf.estimator.EstimatorSpec(
-                    mode=mode,
-                    loss=total_loss,
-                    train_op=train_op,
-                    training_hooks=[
-                        tf.train.LoggingTensorHook({'loss': tf.metrics.mean(total_loss)[1]}, every_n_iter=100)],
-                    )
+            output_spec = tf.estimator.EstimatorSpec(
+                mode=mode,
+                loss=total_loss,
+                train_op=train_op,
+                training_hooks=[
+                    tf.train.LoggingTensorHook({'mean total loss': tf.metrics.mean(total_loss)[1]}, every_n_iter=100)],
+                )
 
         elif mode == tf.estimator.ModeKeys.EVAL:
             def metric_fn(total_loss):

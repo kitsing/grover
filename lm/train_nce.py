@@ -110,7 +110,8 @@ def main(_):
 
     news_config = GroverConfig.from_json_file(FLAGS.config_file)
     print(news_config)
-    tf.gfile.MakeDirs(FLAGS.output_dir)
+    if hvd.rank() == 0:
+        tf.gfile.MakeDirs(FLAGS.output_dir)
 
     input_files = []
     for input_pattern in FLAGS.input_file.split(","):
@@ -120,7 +121,7 @@ def main(_):
     for noise_pattern in FLAGS.noise_file.split(","):
         noise_files.extend(tf.gfile.Glob(noise_pattern))
 
-    tf.logging.info("*** Input Files ***")
+    # tf.logging.info("*** Input Files ***")
     # for input_file in input_files:
     #     tf.logging.info("  %s" % input_file)
 
@@ -134,7 +135,6 @@ def main(_):
                                     learning_rate=FLAGS.learning_rate,
                                     num_train_steps=FLAGS.num_train_steps,
                                     num_warmup_steps=FLAGS.num_warmup_steps,
-                                    use_tpu=FLAGS.use_tpu,
                                     )
 
     # If TPU is not available, this will fall back to normal Estimator on CPU
