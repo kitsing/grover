@@ -66,7 +66,7 @@ def nce_input_fn_builder(input_files, noise_files, k,
                     np.random.shuffle(s)
                     truncated_num_of_rows = s.shape[0] - s.shape[0] % batch_size
                     # discard portions where we cannot make into a batch
-                    if len(truncated_num_of_rows) == 0:
+                    if truncated_num_of_rows == 0:
                         # TODO raise error if there are no viable batches
                         continue
                     s = s[:truncated_num_of_rows]
@@ -74,7 +74,7 @@ def nce_input_fn_builder(input_files, noise_files, k,
                     mask = np.arange(s.shape[1])[None, :] <= (s == 50266).argmax(axis=1)[:, None]
                     masked = s * mask
 
-                    for b in range(s.shape[0] / batch_size):
+                    for b in range(int(s.shape[0] / batch_size)):
                         yield masked[b*batch_size:(b+1)*batch_size]
 
         return gen
