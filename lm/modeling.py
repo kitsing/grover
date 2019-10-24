@@ -770,7 +770,7 @@ def model_fn_builder(config: GroverConfig, init_checkpoint, learning_rate,
                                                          prefix='training/'),
                     scaffold_fn=scaffold_fn)
             else:
-                output_spec = tf.contrib.tpu.TPUEstimatorSpec(
+                output_spec = tf.estimator.EstimatorSpec(
                     mode=mode,
                     loss=total_loss,
                     train_op=train_op,
@@ -787,7 +787,7 @@ def model_fn_builder(config: GroverConfig, init_checkpoint, learning_rate,
 
             eval_metrics = (metric_fn,
                             [total_loss])
-            output_spec = tf.contrib.tpu.TPUEstimatorSpec(
+            output_spec = tf.estimator.EstimatorSpec(
                 mode=mode,
                 loss=total_loss,
                 eval_metrics=eval_metrics,
@@ -814,7 +814,7 @@ def model_fn_builder(config: GroverConfig, init_checkpoint, learning_rate,
                 )
             pred_logprobs = tf.squeeze(tf.batch_gather(model.log_probs, predictions[:, :, None]), axis=2)
 
-            output_spec = tf.contrib.tpu.TPUEstimatorSpec(
+            output_spec = tf.estimator.EstimatorSpec(
                 mode=mode,
                 predictions={'gt_logprobs': gt_logprobs,
                              'top_p_required': top_p_required,
