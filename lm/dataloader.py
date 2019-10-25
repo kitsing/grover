@@ -41,17 +41,6 @@ def _decode_record_with_noise(record, noise, name_to_features, noise_name_to_fea
         if t.dtype == tf.int64:
             t = tf.cast(t, tf.int32)
         example[name] = t
-
-    from random import random
-    chosen = random()
-    if chosen < 1e-2:
-        input_ids = example['input_ids']
-        from sample.encoder import get_encoder
-        encoder = get_encoder()
-
-        print('===' + encoder.decode(input_ids.tolist()))
-
-
     example['noises'] = tf.cast(noise, tf.int32)
     return example
 
@@ -113,8 +102,6 @@ def nce_input_fn_builder(input_files, noise_files, k,
                     # mask out symbols past EOS
                     mask = np.arange(s.shape[1])[None, :] <= (s == end_symbol).argmax(axis=1)[:, None]
                     masked: np.ndarray = s * mask
-                    if hvd.rank() == 0:
-                        print(encoder.decode(masked[0].tolist()))
                     for b in range(int(s.shape[0] / batch_size)):
                         yield masked[b*batch_size:(b+1)*batch_size]
 
