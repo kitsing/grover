@@ -36,7 +36,8 @@ let batch_size=1
 NODE_LIST=$( scontrol show hostname ${SLURM_JOB_NODELIST} | sed -z 's/\n/\:8,/g' )
 NODE_LIST=${NODE_LIST%?}
 
-horovodrun  --verbose  --mpi-args="-x HOROVOD_MPI_THREADS_DISABLE=1 -mca btl_tcp_if_exclude lo,docker0 --oversubscribe" -np ${SLURM_NTASKS} -H ${NODE_LIST} python lm/train_nce.py \
+horovodrun --start-timeout 2800 --verbose  --mpi-args="--map-by ppr:4:socket \
+        -mca plm_rsh_agent \"ssh -q -o StrictHostKeyChecking=no\"  -mca btl_tcp_if_exclude lo,docker0 --oversubscribe" -np ${SLURM_NTASKS} -H ${NODE_LIST} python lm/train_nce.py \
     --config_file=lm/configs/${model_type}.json \
     --input_file=${input_file} \
     --noise_file=${noise_file} \
@@ -51,4 +52,4 @@ horovodrun  --verbose  --mpi-args="-x HOROVOD_MPI_THREADS_DISABLE=1 -mca btl_tcp
     --use_tpu=False \
     --num_tpu_cores=$num_tpu_cores \
     --init_checkpoint=${init_checkpoint} \
-    --k=${K}
+    --k=${K} |& tee -a log

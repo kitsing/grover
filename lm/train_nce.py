@@ -104,7 +104,6 @@ flags.DEFINE_integer(
 
 def main(_):
     # init hvd
-    hvd.init()
     tf.logging.set_verbosity(tf.logging.INFO)
 
     news_config = GroverConfig.from_json_file(FLAGS.config_file)
@@ -160,6 +159,7 @@ def main(_):
 
 
 if __name__ == "__main__":
+    hvd.init()
     flags.mark_flag_as_required("input_file")
     flags.mark_flag_as_required("output_dir")
     tf.app.run()
