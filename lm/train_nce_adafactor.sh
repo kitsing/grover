@@ -36,7 +36,12 @@ let batch_size=1
 NODE_LIST=$( scontrol show hostname ${SLURM_JOB_NODELIST} | sed -z 's/\n/\:8,/g' )
 NODE_LIST=${NODE_LIST%?}
 
-mpirun --tag-output -bind-to none -map-by slot -mca pml ob1 -mca btl ^openib -x CONDA_SHLVL -x NCCL_DEBUG=INFO -x LD_LIBRARY_PATH -x LS_COLORS -x CONDA_EXE -x CUDNN_LIB_DIR -x LANG -x ENVIRONMENT -x PATH_modshare -x LOADEDMODULES_modshare -x FPATH -x CONDA_PREFIX -x JAVA_HOME -x DYLD_LIBRARY_PATH -x ZSH -x S_COLORS -x LD_LIBRARY_PATH_modshare -x CC -x MODULES_CMD -x LIBRARY_PATH_modshare -x USER -x ENV -x PAGER -x LSCOLORS -x PWD -x HOME -x CONDA_PYTHON_EXE -x LC_TERMINAL -x CMAKE_PREFIX_PATH -x SSH_CLIENT -x MODULES_MODSHARE_DYLD_LIBRARY_PATH -x CUDA_HOME -x CPATH -x TMUX -x SLURM_UMASK -x LC_TERMINAL_VERSION -x BASH_ENV -x XDG_DATA_DIRS -x _LMFILES__modshare -x TMPDIR -x LIBRARY_PATH -x LOADEDMODULES -x CONDA_PROMPT_MODIFIER -x CXX -x CUDNN_INCLUDE_DIR -x PYTHONPATH -x MODULEPATH -x MODULEPATH_modshare -x PATH -x _LMFILES_ -x MODULESHOME -x CONDA_DEFAULT_ENV -x NCCL_ROOT_DIR -x CUDNN_ROOT_DIR --map-by ppr:4:socket -mca plm_rsh_agent "ssh -q -o StrictHostKeyChecking=no" -mca btl_tcp_if_exclude lo,docker0 --oversubscribe  -np ${SLURM_NTASKS} -H ${NODE_LIST} python lm/train_nce.py \
+mpirun -bind-to none -map-by slot \
+    -x NCCL_DEBUG=INFO -x LD_LIBRARY_PATH -x PATH \
+    -x NCCL_SOCKET_IFNAME=^lo,docker0 \
+    -mca pml ob1 -mca btl ^openib \
+    -mca btl_tcp_if_exclude lo,docker0 \
+     -np ${SLURM_NTASKS} -H ${NODE_LIST} python lm/train_nce.py \
     --config_file=lm/configs/${model_type}.json \
     --input_file=${input_file} \
     --noise_file=${noise_file} \
