@@ -33,7 +33,10 @@ num_train_steps=800000
 # Make sure batch size scales.
 let batch_size=1
 
-horovodrun --mpi-args="--oversubscribe" -np 8 -H localhost:8 python lm/train_nce.py \
+NODE_LIST=$( scontrol show hostname ${SLURM_JOB_NODELIST} | sed -z 's/\n/\:8,/g' )
+NODE_LIST=${NODE_LIST%?}
+
+horovodrun  --verbose  --mpi-args="-x HOROVOD_MPI_THREADS_DISABLE=1 -mca btl_tcp_if_exclude lo,docker0 --oversubscribe" -np ${SLURM_NTASKS} -H ${NODE_LIST} python lm/train_nce.py \
     --config_file=lm/configs/${model_type}.json \
     --input_file=${input_file} \
     --noise_file=${noise_file} \
