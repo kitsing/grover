@@ -17,6 +17,4 @@
 #SBATCH --gres=gpu:8
 #SBATCH --constraint=volta32gb
 
-export OMPI_MCA_btl_openib_allow_ib=1
-
-mpirun -np 16 python $HOME/pythonfile.py --batch_size=128 --epochs=90
+srun --label lm/train_nce_adafactor.sh
