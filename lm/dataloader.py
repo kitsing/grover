@@ -41,6 +41,17 @@ def _decode_record_with_noise(record, noise, name_to_features, noise_name_to_fea
         if t.dtype == tf.int64:
             t = tf.cast(t, tf.int32)
         example[name] = t
+    import horovod.tensorflow as hvd
+    if hvd.rank() == 0:
+        from random import random
+        chosen = random
+        if chosen < 1e-2:
+            input_ids = example['input_ids']
+            from sample.encoder import get_encoder
+            encoder = get_encoder()
+            print(encoder.decode(input_ids.tolist()))
+
+
     example['noises'] = tf.cast(noise, tf.int32)
     return example
 
@@ -100,7 +111,7 @@ def nce_input_fn_builder(input_files, noise_files, k,
                         continue
                     s = s[:truncated_num_of_rows]
                     # mask out symbols past EOS
-                    mask = np.arange(s.shape[1])[None, :] <= (s == 50266).argmax(axis=1)[:, None]
+                    mask = np.arange(s.shape[1])[None, :] <= (s == end_symbol).argmax(axis=1)[:, None]
                     masked: np.ndarray = s * mask
                     if hvd.rank() == 0:
                         print(encoder.decode(masked[0].tolist()))
@@ -154,7 +165,6 @@ def nce_input_fn_builder(input_files, noise_files, k,
                 batch_size=batch_size,
                 num_parallel_batches=num_cpu_threads,
                 drop_remainder=True))
-        print(d)
         return d
 
     def parallel_interleave_shuffle(input_files):
