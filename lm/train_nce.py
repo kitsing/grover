@@ -141,7 +141,7 @@ def main(_):
     # or GPU.
     estimator = tf.estimator.Estimator(
         model_fn=model_fn,
-        config=tf.estimator.RunConfig(session_config=run_config, strategy=strategy),
+        config=tf.estimator.RunConfig(session_config=run_config, train_distribute=strategy),
         model_dir=model_dir,
         params={'model_dir': model_dir}
     )
@@ -168,7 +168,6 @@ def set_tf_config():
     start_port = 12345
 
     rank = int(os.environ['SLURM_PROCID'])
-    num_tasks_per_node = int(os.environ['SLURM_NTASKS_PER_NODE'])
     tf_config_json = {
         'cluster': {
             'worker': []
@@ -177,6 +176,7 @@ def set_tf_config():
     }
     for host_idx, host in enumerate(host_list):
         tf_config_json['cluster']['worker'].append('{}:{}'.format(host, host_idx + start_port))
+    print(tf_config_json)
     os.environ['TF_CONFIG'] = json.dumps(tf_config_json)
 
 if __name__ == "__main__":
