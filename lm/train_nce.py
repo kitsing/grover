@@ -154,8 +154,8 @@ def main(_):
                                           seq_length=FLAGS.max_seq_length,
                                           is_training=True)
 
-    estimator.train(input_fn=train_input_fn, max_steps=FLAGS.num_train_steps,
-                    )
+    estimator.train_and_evaluate(train_spec=tf.estimator.TrainSpec(input_fn=train_input_fn),
+                                 )
 
 
 def set_tf_config():
@@ -168,6 +168,8 @@ def set_tf_config():
     start_port = 12345
 
     rank = int(os.environ['SLURM_PROCID'])
+    num_tasks = int(os.environ['SLURM_NTASKS'])
+    num_tasks_per_node = num_tasks // len(host_list)
     tf_config_json = {
         'cluster': {
             'worker': []
@@ -175,7 +177,8 @@ def set_tf_config():
         'task': {'type': 'worker', 'index': rank}
     }
     for host_idx, host in enumerate(host_list):
-        tf_config_json['cluster']['worker'].append('{}:{}'.format(host, host_idx + start_port))
+        for task_id in range(num_tasks_per_node):
+            tf_config_json['cluster']['worker'].append('{}:{}'.format(host, task_id + start_port))
     print(tf_config_json)
     os.environ['TF_CONFIG'] = json.dumps(tf_config_json)
 
