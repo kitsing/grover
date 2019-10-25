@@ -154,8 +154,8 @@ def main(_):
                                           seq_length=FLAGS.max_seq_length,
                                           is_training=True)
 
-    estimator.train_and_evaluate(train_spec=tf.estimator.TrainSpec(input_fn=train_input_fn),
-                                 )
+    tf.estimator.train_and_evaluate(train_spec=tf.estimator.TrainSpec(input_fn=train_input_fn),
+                                    )
 
 
 def set_tf_config():
