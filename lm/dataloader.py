@@ -41,15 +41,15 @@ def _decode_record_with_noise(record, noise, name_to_features, noise_name_to_fea
         if t.dtype == tf.int64:
             t = tf.cast(t, tf.int32)
         example[name] = t
-    import horovod.tensorflow as hvd
-    if hvd.rank() == 0:
-        from random import random
-        chosen = random()
-        if chosen < 1e-2:
-            input_ids = example['input_ids']
-            from sample.encoder import get_encoder
-            encoder = get_encoder()
-            print(encoder.decode(input_ids.tolist()))
+
+    from random import random
+    chosen = random()
+    if chosen < 1e-2:
+        input_ids = example['input_ids']
+        from sample.encoder import get_encoder
+        encoder = get_encoder()
+
+        print('===' + encoder.decode(input_ids.tolist()))
 
 
     example['noises'] = tf.cast(noise, tf.int32)
