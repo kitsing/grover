@@ -36,12 +36,8 @@ let batch_size=1
 NODE_LIST=$( scontrol show hostname ${SLURM_JOB_NODELIST} | sed -z 's/\n/\:8,/g' )
 NODE_LIST=${NODE_LIST%?}
 
-mpirun -bind-to none -map-by slot \
-    -x NCCL_DEBUG=INFO -x LD_LIBRARY_PATH -x PATH \
-    -x NCCL_SOCKET_IFNAME=^lo,docker0 \
-    -mca pml ob1 -mca btl ^openib \
-    -mca btl_tcp_if_exclude lo,docker0 \
-     -np ${SLURM_NTASKS} -H ${NODE_LIST} python lm/train_nce.py \
+horovodrun --autotune --disable-cache --verbose --mpi-args="-x NCCL_SOCKET_IFNAME=^lo,docker0 -mca btl_tcp_if_exclude lo,docker0" \
+     -np "${SLURM_NTASKS}" -H "${NODE_LIST}" python lm/train_nce.py \
     --config_file=lm/configs/${model_type}.json \
     --input_file=${input_file} \
     --noise_file=${noise_file} \
