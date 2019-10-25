@@ -16,7 +16,8 @@ K=5
 # mega, medium, or base
 model_type="base"
 OUTPUT_DIR="/checkpoint/kitsing/grover-models/discriminator" # put your output directory here
-input_file="/checkpoint/kitsing/grover/tfrecords/*.tfrecord" # put your input files here, it can also be something like "*.tfrecord"
+input_file="/checkpoint/kitsing/grover/tfrecords/preprocessed_train*.tfrecord" # put your input files here, it can also be something like "*.tfrecord"
+input_dev_file="/checkpoint/kitsing/grover/tfrecords/preprocessed_valid0[0-5]*.tfrecord" # put your input files here, it can also be something like "*.tfrecord"
 noise_file="/checkpoint/kitsing/grover/unconditional_samples/*.npz" # put your input files here, it can also be something like "*.tfrecord"
 
 if [ ${model_type} == "base" ]; then
@@ -43,6 +44,7 @@ NODE_LIST=${NODE_LIST%?}
 python lm/train_nce.py \
     --config_file=lm/configs/${model_type}.json \
     --input_file=${input_file} \
+    --input_dev_file=${input_dev_file} \
     --noise_file=${noise_file} \
     --output_dir=${OUTPUT_DIR} \
     --max_seq_length=${max_seq_length} \

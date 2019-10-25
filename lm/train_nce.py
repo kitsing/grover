@@ -34,6 +34,10 @@ flags.DEFINE_string(
     "Input TF example files (can be a glob or comma separated).")
 
 flags.DEFINE_string(
+    "input_dev_file", None,
+    "Input dev TF example files (can be a glob or comma separated).")
+
+flags.DEFINE_string(
     "noise_file", None,
     "Input noise files (can be a glob or comma separated).")
 
@@ -117,6 +121,10 @@ def main(_):
     for input_pattern in FLAGS.input_file.split(","):
         input_files.extend(tf.gfile.Glob(input_pattern))
 
+    input_dev_files = []
+    for input_pattern in FLAGS.input_dev_file.split(","):
+        input_files.extend(tf.gfile.Glob(input_pattern))
+
     noise_files = []
     for noise_pattern in FLAGS.noise_file.split(","):
         noise_files.extend(tf.gfile.Glob(noise_pattern))
@@ -139,7 +147,7 @@ def main(_):
 
     # If TPU is not available, this will fall back to normal Estimator on CPU
     # or GPU.
-    estimator = tf.estimator.Estimator(
+    est = tf.estimator.Estimator(
         model_fn=model_fn,
         config=tf.estimator.RunConfig(session_config=run_config, train_distribute=strategy),
         model_dir=model_dir,
@@ -154,8 +162,15 @@ def main(_):
                                           seq_length=FLAGS.max_seq_length,
                                           is_training=True)
 
-    tf.estimator.train_and_evaluate(train_spec=tf.estimator.TrainSpec(input_fn=train_input_fn),
-                                    eval_spec=tf.estimator.EvalSpec(input_fn=train_input_fn),
+    eval_input_fn = nce_input_fn_builder(k=FLAGS.k,
+                                         input_files=input_dev_files,
+                                         noise_files=noise_files,
+                                         seq_length=FLAGS.max_seq_length,
+                                         is_training=False)
+
+    tf.estimator.train_and_evaluate(est,
+                                    train_spec=tf.estimator.TrainSpec(input_fn=train_input_fn),
+                                    eval_spec=tf.estimator.EvalSpec(input_fn=eval_input_fn, steps=2000),
                                     )
 
 
