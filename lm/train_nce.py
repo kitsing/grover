@@ -14,8 +14,6 @@
 # limitations under the License.
 
 """ Training script! """
-import horovod.tensorflow as hvd
-
 import tensorflow as tf
 
 from lm.dataloader import nce_input_fn_builder
@@ -103,12 +101,16 @@ flags.DEFINE_integer(
 
 
 def main(_):
-    # init hvd
+    import os
+    rank = int(os.environ['SLURM_PROCID'])
+    local_rank = int(os.environ['SLURM_LOCALID'])
+    strategy = tf.distribute.experimental.MultiWorkerMirroredStrategy()
+
     tf.logging.set_verbosity(tf.logging.INFO)
 
     news_config = GroverConfig.from_json_file(FLAGS.config_file)
     print(news_config)
-    if hvd.rank() == 0:
+    if rank == 0:
         tf.gfile.MakeDirs(FLAGS.output_dir)
 
     input_files = []
@@ -125,9 +127,9 @@ def main(_):
 
     run_config = tf.ConfigProto()
     run_config.gpu_options.allow_growth = True
-    run_config.gpu_options.visible_device_list = str(hvd.local_rank())
+    run_config.gpu_options.visible_device_list = str(local_rank)
 
-    model_dir = FLAGS.output_dir if hvd.rank() == 0 else None
+    model_dir = FLAGS.output_dir
 
     model_fn = nce_model_fn_builder(news_config, init_checkpoint=FLAGS.init_checkpoint,
                                     learning_rate=FLAGS.learning_rate,
@@ -139,11 +141,10 @@ def main(_):
     # or GPU.
     estimator = tf.estimator.Estimator(
         model_fn=model_fn,
-        config=tf.estimator.RunConfig(session_config=run_config),
+        config=tf.estimator.RunConfig(session_config=run_config, strategy=strategy),
         model_dir=model_dir,
         params={'model_dir': model_dir}
     )
-    bcast_hook = hvd.BroadcastGlobalVariablesHook(0)
 
     tf.logging.info("***** Running training *****")
     tf.logging.info("  Batch size = %d", FLAGS.train_batch_size)
@@ -153,15 +154,33 @@ def main(_):
                                           seq_length=FLAGS.max_seq_length,
                                           is_training=True)
 
-    estimator.train(input_fn=train_input_fn, max_steps=FLAGS.num_train_steps // hvd.size(),
-                    hooks=[bcast_hook,]
+    estimator.train(input_fn=train_input_fn, max_steps=FLAGS.num_train_steps,
                     )
 
 
+def set_tf_config():
+    import os
+    import json
+    from hostlist import expand_hostlist
+
+    host_list = expand_hostlist(os.environ['SLURM_JOB_NODELIST'])
+
+    start_port = 12345
+
+    rank = int(os.environ['SLURM_PROCID'])
+    num_tasks_per_node = int(os.environ['SLURM_NTASKS_PER_NODE'])
+    tf_config_json = {
+        'cluster': {
+            'worker': []
+        },
+        'task': {'type': 'worker', 'index': rank}
+    }
+    for host_idx, host in enumerate(host_list):
+        tf_config_json['cluster']['worker'].append('{}:{}'.format(host, host_idx + start_port))
+    os.environ['TF_CONFIG'] = json.dumps(tf_config_json)
+
 if __name__ == "__main__":
-    print('==there')
-    hvd.init()
-    print('there==')
     flags.mark_flag_as_required("input_file")
     flags.mark_flag_as_required("output_dir")
-    # tf.app.run()
+    set_tf_config()
+    tf.app.run()

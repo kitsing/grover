@@ -40,7 +40,7 @@ let batch_size=1
 NODE_LIST=$( scontrol show hostname ${SLURM_JOB_NODELIST} | sed -z 's/\n/\:8,/g' )
 NODE_LIST=${NODE_LIST%?}
 
-horovodrun --disable-cache --gloo -np ${SLURM_NTASKS} -H ${NODE_LIST} python lm/train_nce.py \
+python lm/train_nce.py \
     --config_file=lm/configs/${model_type}.json \
     --input_file=${input_file} \
     --noise_file=${noise_file} \

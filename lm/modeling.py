@@ -830,7 +830,6 @@ def model_fn_builder(config: GroverConfig, init_checkpoint, learning_rate,
 def nce_model_fn_builder(config: GroverConfig, init_checkpoint, learning_rate,
                          num_train_steps, num_warmup_steps):
     """Returns `model_fn` closure for TPUEstimator."""
-    import horovod.tensorflow as hvd
 
     def model_fn(features, labels, mode, params):  # pylint: disable=unused-argument
         """The `model_fn` for TPUEstimator."""

@@ -51,7 +51,6 @@ def nce_input_fn_builder(input_files, noise_files, k,
                          num_cpu_threads=4,
                          evaluate_for_fixed_number_of_steps=True):
     """Creates an `input_fn` closure to be passed to TPUEstimator."""
-    import horovod.tensorflow as hvd
     from sample.encoder import get_encoder
     encoder = get_encoder()
     end_symbol = encoder.__dict__['end_article']
@@ -107,7 +106,7 @@ def nce_input_fn_builder(input_files, noise_files, k,
 
         return gen
 
-    def input_fn(params):
+    def input_fn(params, input_context=None):
         """The actual input function."""
         # batch_size = params["batch_size"]
         batch_size = 1
@@ -129,7 +128,7 @@ def nce_input_fn_builder(input_files, noise_files, k,
         # For training, we want a lot of parallel reading and shuffling.
         # For eval, we want no shuffling and parallel reading doesn't matter.
         if is_training:
-            d = parallel_interleave_shuffle(input_files)
+            d = parallel_interleave_shuffle(input_files, input_context=input_context)
         else:
             d = tf.data.TFRecordDataset(input_files)
             # If we evaluate for a fixed number of steps we don't want to encounter
@@ -154,8 +153,11 @@ def nce_input_fn_builder(input_files, noise_files, k,
                 drop_remainder=True))
         return d
 
-    def parallel_interleave_shuffle(input_files):
+    def parallel_interleave_shuffle(input_files, input_context = None):
         d = tf.data.Dataset.from_tensor_slices(tf.constant(input_files))
+        if input_context is not None:
+            d = d.shard(input_context.num_input_pipelines,
+                        input_context.input_pipeline_id)
         d = d.repeat()
         d = d.shuffle(buffer_size=len(input_files))
         # `cycle_length` is the number of parallel files that get read.
