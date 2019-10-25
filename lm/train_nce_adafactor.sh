@@ -1,5 +1,9 @@
 #!/usr/bin/env bash
-
+module purge
+module load anaconda3/5.0.1 cuda/10.0 git/2.15.1/gcc.5.4.0 gcc/7.1.0 tmux/2.8/gcc.7.3.0 vim/8.1.0788/gcc.7.3.0 torch/080919/cudnn.7.6.2 NCCL/2.4.8-1-cuda.10.0 openmpi/3.1.1/gcc.7.3.0 java
+. /public/apps/anaconda3/5.0.1/etc/profile.d/conda.sh
+conda deactivate
+conda activate grover
 export PYTHONPATH=$(pwd)
 
 learning_rate=1e-4
@@ -36,8 +40,7 @@ let batch_size=1
 NODE_LIST=$( scontrol show hostname ${SLURM_JOB_NODELIST} | sed -z 's/\n/\:8,/g' )
 NODE_LIST=${NODE_LIST%?}
 
-horovodrun --autotune --disable-cache --verbose --mpi-args="-x NCCL_SOCKET_IFNAME=^lo,docker0 -mca btl_tcp_if_exclude lo,docker0" \
-     -np "${SLURM_NTASKS}" -H "${NODE_LIST}" python lm/train_nce.py \
+horovodrun --disable-cache --gloo -np ${SLURM_NTASKS} -H ${NODE_LIST} python lm/train_nce.py \
     --config_file=lm/configs/${model_type}.json \
     --input_file=${input_file} \
     --noise_file=${noise_file} \
