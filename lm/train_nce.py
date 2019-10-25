@@ -21,10 +21,6 @@ import tensorflow as tf
 from lm.dataloader import nce_input_fn_builder
 from lm.modeling import nce_model_fn_builder, GroverConfig
 
-# init hvd
-hvd.init()
-
-
 flags = tf.flags
 
 FLAGS = flags.FLAGS
@@ -107,6 +103,8 @@ flags.DEFINE_integer(
 
 
 def main(_):
+    # init hvd
+    hvd.init()
     tf.logging.set_verbosity(tf.logging.INFO)
 
     news_config = GroverConfig.from_json_file(FLAGS.config_file)
