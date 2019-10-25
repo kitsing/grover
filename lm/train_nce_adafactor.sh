@@ -31,8 +31,7 @@ fi
 num_train_steps=800000
 
 # Make sure batch size scales.
-let batch_size="$batch_size_per_core * $num_tpu_cores"
-let batch_size=2
+let batch_size=1
 
 horovodrun --mpi-args="--oversubscribe" -np 8 -H localhost:8 python lm/train_nce.py \
     --config_file=lm/configs/${model_type}.json \
