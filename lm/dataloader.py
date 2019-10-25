@@ -44,7 +44,7 @@ def _decode_record_with_noise(record, noise, name_to_features, noise_name_to_fea
     import horovod.tensorflow as hvd
     if hvd.rank() == 0:
         from random import random
-        chosen = random
+        chosen = random()
         if chosen < 1e-2:
             input_ids = example['input_ids']
             from sample.encoder import get_encoder
