@@ -12,7 +12,7 @@
 #SBATCH --partition=learnfair
 ## number of nodes
 #SBATCH --nodes=2
-
+#SBATCH --ntasks-per-node=8
 ## number of tasks per node
 #SBATCH --gres=gpu:8
 #SBATCH --constraint=volta32gb
