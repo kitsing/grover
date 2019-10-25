@@ -155,6 +155,7 @@ def main(_):
                                           is_training=True)
 
     tf.estimator.train_and_evaluate(train_spec=tf.estimator.TrainSpec(input_fn=train_input_fn),
+                                    eval_spec=tf.estimator.EvalSpec(input_fn=train_input_fn),
                                     )
 
 

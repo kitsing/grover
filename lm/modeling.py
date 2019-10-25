@@ -879,8 +879,6 @@ def nce_model_fn_builder(config: GroverConfig, init_checkpoint, learning_rate,
         output_spec = None
 
         if mode == tf.estimator.ModeKeys.TRAIN:
-            from sample.encoder import get_encoder
-            encoder = get_encoder()
             output_spec = tf.estimator.EstimatorSpec(
                 mode=mode,
                 loss=total_loss,
