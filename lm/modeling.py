@@ -470,8 +470,8 @@ class GroverModelResidual(object):
 
         # autoencoder-like architecture
         self.k = noises.shape[1]
-        concatenated = tf.concat((input_ids[:, None, :], noises), axis=1)
-        self.input_ids = tf.reshape(concatenated, (-1, concatenated.shape[2]))[:, 1:]
+        concatenated = tf.concat((input_ids[:, None, :], noises), axis=1)[:, :, 1:]
+        self.input_ids = tf.reshape(concatenated, (-1, concatenated.shape[2]))
         self.batch_size, self.seq_length = get_shape_list(self.input_ids, 2)
         assert config.max_position_embeddings >= self.seq_length
         if cache is None:
@@ -541,6 +541,7 @@ class GroverModelResidual(object):
     def total_loss(self):
         if self.alpha == 1.:
             assert len(self.residuals.shape) == 2
+            assert self.residuals.shape[1] == self.k
             total_loss = - (self.residuals[:, 0] - tf.reduce_logsumexp(self.residuals, axis=1))
             return tf.reduce_mean(total_loss, axis=0)
         else:
