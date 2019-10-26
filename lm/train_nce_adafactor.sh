@@ -36,12 +36,13 @@ fi
 num_train_steps=800000
 
 # Make sure batch size scales.
-let batch_size=1
+let batch_size=2
 
 NODE_LIST=$( scontrol show hostname ${SLURM_JOB_NODELIST} | sed -z 's/\n/\:8,/g' )
 NODE_LIST=${NODE_LIST%?}
 
 export TF_XLA_FLAGS="--tf_xla_auto_jit=2 --tf_xla_cpu_global_jit"
+export XLA_FLAGS="--xla_gpu_cuda_data_dir=${CUDA_HOME}"
 
 python lm/train_nce.py \
     --config_file=lm/configs/${model_type}.json \
