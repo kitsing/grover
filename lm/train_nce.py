@@ -57,7 +57,7 @@ flags.DEFINE_integer(
     "than this will be padded. Must match data generation.")
 
 # flags.DEFINE_integer("train_batch_size", 2, "Total batch size for training.")
-flags.DEFINE_integer("train_batch_size", 1, "Total batch size for training.")
+flags.DEFINE_integer("train_batch_size", 8, "Total batch size for training.")
 
 flags.DEFINE_float("learning_rate", 5e-5, "The initial learning rate for adafactor.")
 
@@ -158,13 +158,15 @@ def main(_):
                                           input_files=input_files,
                                           noise_files=noise_files,
                                           seq_length=FLAGS.max_seq_length,
-                                          is_training=True)
+                                          is_training=True,
+                                          input_batch_size=FLAGS.train_batch_size)
 
     eval_input_fn = nce_input_fn_builder(k=FLAGS.k,
                                          input_files=input_dev_files,
                                          noise_files=noise_files,
                                          seq_length=FLAGS.max_seq_length,
-                                         is_training=False)
+                                         is_training=False,
+                                         input_batch_size=FLAGS.train_batch_size)
 
     tf.estimator.train_and_evaluate(est,
                                     train_spec=tf.estimator.TrainSpec(input_fn=train_input_fn),
