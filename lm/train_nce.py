@@ -195,6 +195,7 @@ def set_tf_config():
     print(tf_config_json)
     os.environ['TF_CONFIG'] = json.dumps(tf_config_json)
 
+
 if __name__ == "__main__":
     flags.mark_flag_as_required("input_file")
     flags.mark_flag_as_required("output_dir")
