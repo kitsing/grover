@@ -164,4 +164,4 @@ if __name__ == "__main__":
     print('there==')
     flags.mark_flag_as_required("input_file")
     flags.mark_flag_as_required("output_dir")
-    # tf.app.run()
+    tf.app.run()
