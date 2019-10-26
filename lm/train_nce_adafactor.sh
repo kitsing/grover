@@ -16,7 +16,7 @@ K=5
 # mega, medium, or base
 model_type="base"
 OUTPUT_DIR="/checkpoint/kitsing/grover-models/discriminator" # put your output directory here
-input_file="/checkpoint/kitsing/grover/tfrecords/*.tfrecord" # put your input files here, it can also be something like "*.tfrecord"
+input_file="/checkpoint/kitsing/grover/tfrecords/preprocessed_train*.tfrecord" # put your input files here, it can also be something like "*.tfrecord"
 noise_file="/checkpoint/kitsing/grover/unconditional_samples/*.npz" # put your input files here, it can also be something like "*.tfrecord"
 
 if [ ${model_type} == "base" ]; then
