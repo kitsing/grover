@@ -72,14 +72,14 @@ def create_optimizer(loss, init_lr, num_train_steps, num_warmup_steps):
     # You could do this, but instead we don't because a) it's slow and b) we already did the 'update clipping'
     # (grads, _) = tf.clip_by_global_norm(grads, clip_norm=1.0)
 
-    train_op = optimizer.minimize(loss)
+    train_op = optimizer.minimize(loss, global_step=tf.train.get_global_step(),)
 
     # Normally the global step update is done inside of `apply_gradients`.
     # However, `AdaFactorOptimizer` doesn't do this. But if you use
     # a different optimizer, you should probably take this line out.
 
-    new_global_step = global_step + 1
-    train_op = tf.group(train_op, [global_step.assign(new_global_step)])
+    # new_global_step = global_step + 1
+    # train_op = tf.group(train_op, [global_step.assign(new_global_step)])
 
     train_metrics = {
         'learning_rate': learning_rate,
