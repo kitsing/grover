@@ -57,8 +57,8 @@ def create_optimizer(loss, init_lr, num_train_steps, num_warmup_steps):
 
     optimizer = tf.compat.v1.train.AdamOptimizer(
         learning_rate=learning_rate,
-        beta_1=0.9,
-        beta_2=0.999,
+        beta1=0.9,
+        beta2=0.999,
         epsilon=1e-6)
 
     # optimizer = AdafactorOptimizer2(
