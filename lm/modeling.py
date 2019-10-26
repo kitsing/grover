@@ -469,6 +469,7 @@ class GroverModelResidual(object):
             self.config.attention_probs_dropout_prob = 0.0
 
         # autoencoder-like architecture
+        original_batch_size = input_ids.shape[0]
         self.k = noises.shape[1]
         concatenated = tf.concat((input_ids[:, None, :], noises), axis=1)[:, :, 1:]
         self.input_ids = tf.reshape(concatenated, (-1, concatenated.shape[2]))
@@ -531,7 +532,8 @@ class GroverModelResidual(object):
 
         self.new_kvs = tf.stack(new_kvs, axis=1) if do_cache else None
 
-        self.residuals = tf.reduce_sum(tf.reshape(self.hidden_state, [self.batch_size, self.k+1, self.seq_length, -1]),
+        self.residuals = tf.reduce_sum(tf.reshape(self.hidden_state, [original_batch_size,
+                                                                      self.k+1, self.seq_length, -1]),
                                        axis=(2, 3))
 
         # THE OUTPUT BIAS DOES NOT SPARK JOY
@@ -541,7 +543,7 @@ class GroverModelResidual(object):
     def total_loss(self):
         if self.alpha == 1.:
             assert len(self.residuals.shape) == 2
-            assert self.residuals.shape[1] == self.k
+            assert self.residuals.shape[1] == self.k + 1
             total_loss = - (self.residuals[:, 0] - tf.reduce_logsumexp(self.residuals, axis=1))
             return tf.reduce_mean(total_loss, axis=0)
         else:
