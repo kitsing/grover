@@ -470,8 +470,9 @@ class GroverModelResidual(object):
 
         # autoencoder-like architecture
         self.k = noises.shape[1]
-        concatenated = tf.concat((input_ids[:, None, :], noises), axis=1)
-        self.input_ids = tf.reshape(concatenated, (-1, concatenated.shape[2]))[:, 1:]
+        original_batch_size = noises.shape[0]
+        concatenated = tf.concat((input_ids[:, None, :], noises), axis=1)[:, :, 1:]
+        self.input_ids = tf.reshape(concatenated, (-1, concatenated.shape[2]))
         self.batch_size, self.seq_length = get_shape_list(self.input_ids, 2)
         assert config.max_position_embeddings >= self.seq_length
         if cache is None:
@@ -531,7 +532,7 @@ class GroverModelResidual(object):
 
         self.new_kvs = tf.stack(new_kvs, axis=1) if do_cache else None
 
-        self.residuals = tf.reduce_sum(tf.reshape(self.hidden_state, [self.batch_size, self.k+1, self.seq_length, -1]),
+        self.residuals = tf.reduce_sum(tf.reshape(self.hidden_state, [original_batch_size, self.k+1, self.seq_length, -1]),
                                        axis=(2, 3))
 
         # THE OUTPUT BIAS DOES NOT SPARK JOY
