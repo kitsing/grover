@@ -54,27 +54,32 @@ def create_optimizer(loss, init_lr, num_train_steps, num_warmup_steps):
     # It is recommended that you use this optimizer for fine tuning, since this
     # is how the model was trained (note that the Adam m/v variables are NOT
     # loaded from init_checkpoint.)
-    optimizer = AdafactorOptimizer2(
-        learning_rate=learning_rate,
-        decay_rate=0.01,
-        beta1=0.9,
-        epsilon1=1e-6,)
-        # exclude_from_decay=["LayerNorm", "layer_norm", "bias"])
 
-    tvars = tf.trainable_variables()
-    grads = tf.gradients(loss, tvars)
+    optimizer = tf.compat.v1.train.AdamOptimizer(
+        learning_rate=learning_rate,
+        beta_1=0.9,
+        beta_2=0.999,
+        epsilon=1e-6)
+
+    # optimizer = AdafactorOptimizer2(
+    #     learning_rate=learning_rate,
+    #     decay_rate=0.01,
+    #     beta1=0.9,
+    #     epsilon1=1e-6,)
+    #     # exclude_from_decay=["LayerNorm", "layer_norm", "bias"])
+
 
     # You could do this, but instead we don't because a) it's slow and b) we already did the 'update clipping'
     # (grads, _) = tf.clip_by_global_norm(grads, clip_norm=1.0)
 
-    train_op = optimizer.apply_gradients(
-        zip(grads, tvars), global_step=global_step)
+    train_op = optimizer.minimize(loss)
 
     # Normally the global step update is done inside of `apply_gradients`.
     # However, `AdaFactorOptimizer` doesn't do this. But if you use
     # a different optimizer, you should probably take this line out.
-    new_global_step = global_step + 1
-    train_op = tf.group(train_op, [global_step.assign(new_global_step)])
+
+    # new_global_step = global_step + 1
+    # train_op = tf.group(train_op, [global_step.assign(new_global_step)])
 
     train_metrics = {
         'learning_rate': learning_rate,
