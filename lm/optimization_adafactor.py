@@ -55,17 +55,17 @@ def create_optimizer(loss, init_lr, num_train_steps, num_warmup_steps):
     # is how the model was trained (note that the Adam m/v variables are NOT
     # loaded from init_checkpoint.)
 
-    optimizer = tf.compat.v1.train.AdamOptimizer(
-        learning_rate=learning_rate,
-        beta1=0.9,
-        beta2=0.999,
-        epsilon=1e-6)
-
-    # optimizer = AdafactorOptimizer2(
+    # optimizer = tf.compat.v1.train.AdamOptimizer(
     #     learning_rate=learning_rate,
-    #     decay_rate=0.01,
     #     beta1=0.9,
-    #     epsilon1=1e-6,)
+    #     beta2=0.999,
+    #     epsilon=1e-6)
+
+    optimizer = AdafactorOptimizer2(
+        learning_rate=learning_rate,
+        decay_rate=0.01,
+        beta1=0.9,
+        epsilon1=1e-6,)
     #     # exclude_from_decay=["LayerNorm", "layer_norm", "bias"])
 
 
@@ -78,8 +78,8 @@ def create_optimizer(loss, init_lr, num_train_steps, num_warmup_steps):
     # However, `AdaFactorOptimizer` doesn't do this. But if you use
     # a different optimizer, you should probably take this line out.
 
-    # new_global_step = global_step + 1
-    # train_op = tf.group(train_op, [global_step.assign(new_global_step)])
+    new_global_step = global_step + 1
+    train_op = tf.group(train_op, [global_step.assign(new_global_step)])
 
     train_metrics = {
         'learning_rate': learning_rate,
