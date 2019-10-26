@@ -134,8 +134,6 @@ def main(_):
     #     tf.logging.info("  %s" % input_file)
 
     run_config = tf.ConfigProto()
-    run_config.gpu_options.allow_growth = True
-    run_config.gpu_options.visible_device_list = str(local_rank)
 
     model_dir = FLAGS.output_dir
 
