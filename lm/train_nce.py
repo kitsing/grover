@@ -133,7 +133,7 @@ def main(_):
     # for input_file in input_files:
     #     tf.logging.info("  %s" % input_file)
 
-    run_config = tf.ConfigProto()
+    run_config = tf.ConfigProto(allow_soft_placement=True, log_device_placement=True)
 
     model_dir = FLAGS.output_dir
 
