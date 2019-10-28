@@ -55,6 +55,7 @@ def nce_input_fn_builder(input_files, noise_files, k,
     from sample.encoder import get_encoder
     encoder = get_encoder()
     end_symbol = encoder.__dict__['end_article']
+
     def build_gen(np_filenames, batch_size):
         import numpy as np
 
@@ -96,7 +97,6 @@ def nce_input_fn_builder(input_files, noise_files, k,
                     remainder.append(s[truncated_num_of_rows:])
                     remainder_len = remainder_len + s.shape[0] % batch_size
                     if truncated_num_of_rows == 0:
-                        # TODO raise error if there are no viable batches
                         continue
                     s = s[:truncated_num_of_rows]
                     # mask out symbols past EOS
@@ -106,6 +106,8 @@ def nce_input_fn_builder(input_files, noise_files, k,
                         yield masked[b*batch_size:(b+1)*batch_size]
 
         return gen
+
+    built_gen = build_gen(noise_files, k)
 
     def input_fn(params, input_context=None):
         """The actual input function."""
@@ -120,7 +122,6 @@ def nce_input_fn_builder(input_files, noise_files, k,
             'noise_probs': tf.FixedLenFeature((k,), dtype=tf.float32)
         }
 
-        built_gen = build_gen(noise_files, k)
         nd = tf.data.Dataset.from_generator(built_gen,
                                             tf.int64,
                                             output_shapes=tf.TensorShape([k, seq_length+1]))

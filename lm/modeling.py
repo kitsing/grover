@@ -885,9 +885,7 @@ def nce_model_fn_builder(config: GroverConfig, init_checkpoint, learning_rate,
                 loss=total_loss,
                 train_op=train_op,
                 training_hooks=[
-                    tf.train.LoggingTensorHook({'mean total loss': tf.metrics.mean(total_loss)[1],
-                                                'example': residual_model.input_ids[0],
-                                                'example noise': residual_model.input_ids[1]}, every_n_iter=100)],
+                    tf.train.LoggingTensorHook({'mean total loss': tf.metrics.mean(total_loss)[1]}, every_n_iter=100)],
                 )
 
         elif mode == tf.estimator.ModeKeys.EVAL:
