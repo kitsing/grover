@@ -27,12 +27,6 @@ import argparse
 
 parser = argparse.ArgumentParser(description='Contextual generation (aka given some metadata we will generate articles')
 parser.add_argument(
-    '-out_fn',
-    dest='out_fn',
-    type=str,
-    help='Out jsonl, which will contain the completed jsons',
-)
-parser.add_argument(
     '-model_config_fn',
     dest='model_config_fn',
     default='../lm/configs/base.json',
@@ -99,8 +93,7 @@ print("\n~~\nbatch size={}, max batch size={}, num chunks={}, batch size per chu
 
 tf_config = tf.ConfigProto(allow_soft_placement=True)
 
-with tf.Session(config=tf_config, graph=tf.Graph()) as sess, \
-        open(args.out_fn, 'w') as f_out:
+with tf.Session(config=tf_config, graph=tf.Graph()) as sess:
 
     initial_context = tf.placeholder(tf.int32, [batch_size_per_chunk, None])
     p_for_topp = tf.placeholder(tf.float32, [batch_size_per_chunk])
