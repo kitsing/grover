@@ -30,24 +30,12 @@ flags.DEFINE_string(
     "This specifies the model architecture.")
 
 flags.DEFINE_string(
-    "input_file", None,
-    "Input TF example files (can be a glob or comma separated).")
-
-flags.DEFINE_string(
     "input_dev_file", None,
     "Input dev TF example files (can be a glob or comma separated).")
 
 flags.DEFINE_string(
     "noise_file", None,
     "Input noise files (can be a glob or comma separated).")
-
-flags.DEFINE_string(
-    "noise_dev_file", None,
-    "Input dev noise files (can be a glob or comma separated).")
-
-flags.DEFINE_string(
-    "output_dir", None,
-    "The output directory where the model checkpoints will be written.")
 
 ## Other parameters
 flags.DEFINE_string(
@@ -118,7 +106,7 @@ def main(_):
     local_rank = int(os.environ['SLURM_LOCALID'])
     strategy = tf.distribute.experimental.MultiWorkerMirroredStrategy()
 
-    tf.logging.set_verbosity(tf.logging.WARN)
+    tf.logging.set_verbosity(tf.logging.INFO)
 
     news_config = GroverConfig.from_json_file(FLAGS.config_file)
     print(news_config)
@@ -136,10 +124,6 @@ def main(_):
     noise_files = []
     for noise_pattern in FLAGS.noise_file.split(","):
         noise_files.extend(tf.gfile.Glob(noise_pattern))
-
-    noise_dev_files = []
-    for noise_pattern in FLAGS.noise_dev_file.split(","):
-        noise_dev_files.extend(tf.gfile.Glob(noise_pattern))
 
     # tf.logging.info("*** Input Files ***")
     # for input_file in input_files:
@@ -177,13 +161,13 @@ def main(_):
 
     eval_input_fn = nce_input_fn_builder(k=FLAGS.k,
                                          input_files=input_dev_files,
-                                         noise_files=noise_dev_files,
+                                         noise_files=noise_files,
                                          seq_length=FLAGS.max_seq_length,
                                          is_training=False,
                                          input_batch_size=FLAGS.train_batch_size)
 
     tf.estimator.train_and_evaluate(est,
-                                    train_spec=tf.estimator.TrainSpec(input_fn=train_input_fn, steps=1000000),
+                                    train_spec=tf.estimator.TrainSpec(input_fn=train_input_fn),
                                     eval_spec=tf.estimator.EvalSpec(input_fn=eval_input_fn, steps=2000),
                                     )
 
