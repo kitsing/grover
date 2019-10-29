@@ -154,7 +154,6 @@ def main(_):
                                     learning_rate=FLAGS.learning_rate,
                                     num_train_steps=FLAGS.num_train_steps,
                                     num_warmup_steps=FLAGS.num_warmup_steps,
-                                    gen_checkpoint=None,
                                     )
 
     # If TPU is not available, this will fall back to normal Estimator on CPU
