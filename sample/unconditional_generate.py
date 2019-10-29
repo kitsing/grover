@@ -7,7 +7,8 @@ sys.path.append('../')
 from lm.modeling import GroverModel, GroverConfig, sample
 from sample.encoder import get_encoder, format_context, _tokenize_article_pieces, extract_generated_target
 from tqdm import tqdm
-
+from os import environ
+from random import seed as rnd_seed
 
 def serialize(tokens: np.ndarray, probs: np.ndarray, prefix: str, dir: str):
     """
@@ -25,7 +26,7 @@ def serialize(tokens: np.ndarray, probs: np.ndarray, prefix: str, dir: str):
 
 import argparse
 
-parser = argparse.ArgumentParser(description='Contextual generation (aka given some metadata we will generate articles')
+parser = argparse.ArgumentParser(description='Uncontextual generation')
 parser.add_argument(
     '-model_config_fn',
     dest='model_config_fn',
@@ -68,12 +69,17 @@ parser.add_argument(
     type=int,
     help='max batch size. You can leave this out and we will infer one based on the number of hidden layers',
 )
+parser.add_argument('--seed', default=42, type=int)
 
 parser.add_argument('-prefix', default='unconditioned_', type=str)
 parser.add_argument('-dir', default='./', type=str)
 parser.add_argument('-num_gpus', default=8, type=int)
 
 args = parser.parse_args()
+
+seed = int(environ['SLURM_PROCID']) + args.seed
+rnd_seed(seed)
+tf.set_random_seed(seed)
 
 encoder = get_encoder()
 news_config = GroverConfig.from_json_file(args.model_config_fn)
@@ -94,7 +100,6 @@ print("\n~~\nbatch size={}, max batch size={}, num chunks={}, batch size per chu
 tf_config = tf.ConfigProto(allow_soft_placement=True)
 
 with tf.Session(config=tf_config, graph=tf.Graph()) as sess:
-
     initial_context = tf.placeholder(tf.int32, [batch_size_per_chunk, None])
     p_for_topp = tf.placeholder(tf.float32, [batch_size_per_chunk])
     eos_token = tf.placeholder(tf.int32, [])
