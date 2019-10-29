@@ -183,7 +183,7 @@ def main(_):
                                          input_batch_size=FLAGS.train_batch_size)
 
     tf.estimator.train_and_evaluate(est,
-                                    train_spec=tf.estimator.TrainSpec(input_fn=train_input_fn, steps=1000000),
+                                    train_spec=tf.estimator.TrainSpec(input_fn=train_input_fn, max_steps=1000000),
                                     eval_spec=tf.estimator.EvalSpec(input_fn=eval_input_fn, steps=2000),
                                     )
 
