@@ -116,7 +116,8 @@ def main(_):
     import os
     rank = int(os.environ['SLURM_PROCID'])
     local_rank = int(os.environ['SLURM_LOCALID'])
-    strategy = tf.distribute.experimental.MultiWorkerMirroredStrategy()
+    strategy = \
+        tf.distribute.experimental.MultiWorkerMirroredStrategy(communication=tf.distribute.experimental.CollectiveCommunication.NCCL)
 
     tf.logging.set_verbosity(tf.logging.WARN)
 
@@ -153,6 +154,7 @@ def main(_):
                                     learning_rate=FLAGS.learning_rate,
                                     num_train_steps=FLAGS.num_train_steps,
                                     num_warmup_steps=FLAGS.num_warmup_steps,
+                                    gen_checkpoint=None,
                                     )
 
     # If TPU is not available, this will fall back to normal Estimator on CPU
