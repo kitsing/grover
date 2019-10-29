@@ -23,7 +23,7 @@ import tensorflow as tf
 from lm import optimization_adafactor
 from lm.utils import get_assignment_map_from_checkpoint, get_shape_list, get_attention_mask, gelu, layer_norm, dropout, \
     construct_scalar_host_call
-
+from typing import Optional
 
 class GroverConfig(object):
     """Configuration for `GroverModel`"""
@@ -38,7 +38,8 @@ class GroverConfig(object):
                  hidden_dropout_prob=0.1,
                  attention_probs_dropout_prob=0.1,
                  max_position_embeddings=512,
-                 initializer_range=0.02):
+                 initializer_range=0.02,
+                 scope_prefix='newslm'):
         """Constructs NewsConfig.
 
         Args:
@@ -72,6 +73,7 @@ class GroverConfig(object):
         self.max_position_embeddings = max_position_embeddings
         self.initializer_range = initializer_range
         self.pad_token_id = 0
+        self.scope_prefix=scope_prefix
 
     @classmethod
     def from_dict(cls, json_object):
@@ -346,7 +348,7 @@ def embed(input_ids,
     return layer_norm(embedded_input, name='embed_norm'), embedding_table
 
 
-def _top_p_sample(logits, ignore_ids=None, num_samples=1, p=0.9):
+def _top_p_sample(logits, ignore_ids=None, num_samples=1, p=0.9, seed: Optional[int] = None):
     """
     Does top-p sampling. if ignore_ids is on, then we will zero out those logits.
     :param logits: [batch_size, vocab_size] tensor
@@ -371,7 +373,7 @@ def _top_p_sample(logits, ignore_ids=None, num_samples=1, p=0.9):
                 'probs': probs,
                 'sample': tf.random.categorical(
                     logits=masked_out_logits,
-                    num_samples=num_samples, dtype=tf.int32),
+                    num_samples=num_samples, dtype=tf.int32, seed=seed),
             }
 
         # [batch_size, vocab_perm]
@@ -613,7 +615,7 @@ class GroverModel(object):
             assert features_ == (config.hidden_size // config.num_attention_heads)
             caches = tf.unstack(cache, axis=1)
 
-        with tf.variable_scope(scope, default_name='newslm', reuse=reuse):
+        with tf.variable_scope(scope, default_name=self.config.scope_prefix, reuse=reuse):
             with tf.variable_scope("embeddings"):
                 embeddings, self.embedding_table = embed(self.input_ids, config.vocab_size,
                                                          config.hidden_size,
@@ -828,8 +830,10 @@ def model_fn_builder(config: GroverConfig, init_checkpoint, learning_rate,
     return model_fn
 
 
-def nce_model_fn_builder(config: GroverConfig, init_checkpoint, learning_rate,
-                         num_train_steps, num_warmup_steps):
+def nce_model_fn_builder(config: GroverConfig, init_checkpoint,
+                         learning_rate,
+                         num_train_steps, num_warmup_steps, get_full_score: bool = False,
+                         gen_checkpoint: Optional[str] = None):
     """Returns `model_fn` closure for TPUEstimator."""
 
     def model_fn(features, labels, mode, params):  # pylint: disable=unused-argument
@@ -868,6 +872,34 @@ def nce_model_fn_builder(config: GroverConfig, init_checkpoint, learning_rate,
             (assignment_map, initialized_variable_names
              ) = get_assignment_map_from_checkpoint(tvars, init_checkpoint)
             tf.train.init_from_checkpoint(init_checkpoint, assignment_map)
+
+        gen_config = copy.deepcopy(config)
+        gen_config.scope_prefix = 'gen_newslm'
+
+        gen_model = None
+        if gen_checkpoint is not None:
+            gen_model = GroverModel(
+                config=gen_config,
+                is_training=False,
+                input_ids=input_ids,
+                pad_token_id=config.pad_token_id,
+                chop_off_last_token=False,
+            )
+
+            gen_vars = tf.train.list_variables(gen_checkpoint)
+            gen_assignment_map = dict()
+            for v in gen_vars:
+                name, var = v
+                splitted_name = name.split('newslm')
+                tf.logging.info(f'found in gen_checkpoint: {name}')
+                if len(splitted_name) > 1:
+                    new_name = ''.join([gen_config.scope_prefix] + splitted_name[1:])
+                    tf.logging.info(f'new name: {new_name}')
+                    gen_assignment_map[new_name] = name
+            tf.train.init_from_checkpoint(gen_checkpoint, gen_assignment_map)
+
+        if get_full_score:
+            assert gen_model is not None
 
         tf.logging.info("**** Trainable Variables ****")
         for var in tvars:
@@ -909,7 +941,8 @@ def nce_model_fn_builder(config: GroverConfig, init_checkpoint, learning_rate,
     return model_fn
 
 
-def sample_step(tokens, ignore_ids, news_config, batch_size=1, p_for_topp=0.95, cache=None, do_topk=False):
+def sample_step(tokens, ignore_ids, news_config, batch_size=1, p_for_topp=0.95, cache=None, do_topk=False,
+                seed: Optional[int] = None):
     """
     Helper function that samples from grover for a single step
     :param tokens: [batch_size, n_ctx_b] tokens that we will predict from
@@ -943,7 +976,8 @@ def sample_step(tokens, ignore_ids, news_config, batch_size=1, p_for_topp=0.95, 
     if do_topk:
         sample_info = _top_k_sample(next_logits, num_samples=1, k=tf.cast(p_for_topp, dtype=tf.int32))
     else:
-        sample_info = _top_p_sample(next_logits, ignore_ids=ignore_ids, num_samples=1, p=p_for_topp)
+        sample_info = _top_p_sample(next_logits, ignore_ids=ignore_ids, num_samples=1, p=p_for_topp,
+                                    seed=seed)
 
     new_tokens = tf.squeeze(sample_info['sample'], 1)
     new_probs = tf.squeeze(tf.batch_gather(sample_info['probs'], sample_info['sample']), 1)
@@ -968,7 +1002,7 @@ def initialize_from_context(initial_context, ignore_ids, news_config, p_for_topp
 
 
 def sample(news_config: GroverConfig, initial_context, eos_token, ignore_ids=None, p_for_topp=0.95,
-           do_topk=False):
+           do_topk=False, seed: Optional[int] = None):
     """
     V1 version of: sample outputs from a model, and do it all at once
     :param news_config: Configuration used to construct the model
@@ -995,7 +1029,8 @@ def sample(news_config: GroverConfig, initial_context, eos_token, ignore_ids=Non
             """ for whatever reason this didn't work when I ran it on more than one at once... ugh."""
             next_outputs = sample_step(ctx[:, -1][:, None], ignore_ids=ignore_ids, news_config=news_config,
                                        batch_size=batch_size, p_for_topp=p_for_topp, cache=cache,
-                                       do_topk=do_topk)
+                                       do_topk=do_topk,
+                                       seed=seed)
 
             # Update everything
             new_cache = tf.concat([cache, next_outputs['new_cache']], axis=-2)
