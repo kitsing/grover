@@ -109,12 +109,18 @@ with tf.Session(config=tf_config, graph=tf.Graph()) as sess:
     all_tokens = []
     all_probs = []
 
+
+    def pad_to_1025(tensor):
+        tensor_length = tensor.shape[1]
+        to_pad = tf.zeros((tensor.shape[0], 1025 - tensor_length), dtype=tensor.dtype)
+        return tf.concat((tensor, to_pad), axis=1)
+
     for i in range(args.num_gpus):
         with tf.device('/gpu:'+str(i)):
             tokens, probs = sample(news_config=news_config, initial_context=initial_context,
                                    eos_token=eos_token, ignore_ids=ignore_ids, p_for_topp=p_for_topp,
                                    do_topk=False, seed=i)
-            all_tokens.append(tokens)
+            all_tokens.append(pad_to_1025(tokens))
             all_probs.append(probs)
 
     with tf.device('/cpu:0'):
