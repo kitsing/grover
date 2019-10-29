@@ -1,30 +1,31 @@
 import tensorflow as tf
 import numpy as np
 import sys
-import json
+import argparse
 
 sys.path.append('../')
-from lm.modeling import GroverModel, GroverConfig, sample
+from lm.modeling import GroverConfig, sample
 from sample.encoder import get_encoder, format_context, _tokenize_article_pieces, extract_generated_target
 from tqdm import tqdm
 from os import environ
 from random import seed as rnd_seed
 
-def serialize(tokens: np.ndarray, probs: np.ndarray, prefix: str, dir: str):
+
+def serialize(tokens: np.ndarray, probs_to_serialize: np.ndarray, prefix: str, dir: str):
     """
 
     :param tokens:
-    :param probs:
+    :param probs_to_serialize:
+    :param prefix:
+    :param dir:
     :return:
     """
     from tempfile import mkstemp
     handle, filename = mkstemp(prefix=prefix, dir=dir, suffix='.npz')
     from os import close
     close(handle)
-    np.savez(file=filename, tokens=tokens, probs=probs)
+    np.savez(file=filename, tokens=tokens, probs=probs_to_serialize)
 
-
-import argparse
 
 parser = argparse.ArgumentParser(description='Uncontextual generation')
 parser.add_argument(
