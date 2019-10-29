@@ -111,8 +111,8 @@ with tf.Session(config=tf_config, graph=tf.Graph()) as sess:
 
 
     def pad_to_1025(tensor):
-        tensor_length = tensor.shape[1]
-        to_pad = tf.zeros((tensor.shape[0], 1025 - tensor_length), dtype=tensor.dtype)
+        tensor_length = tf.shape(tensor)[1]
+        to_pad = tf.zeros((batch_size_per_chunk, 1025 - tensor_length), dtype=tensor.dtype)
         return tf.concat((tensor, to_pad), axis=1)
 
     for i in range(args.num_gpus):
