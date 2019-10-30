@@ -203,7 +203,7 @@ def set_tf_config():
     local_name = os.environ['SLURMD_NODENAME']
     # FIXME this is brittle because we may not have same # of gpus per machine
     # FIXME however tf only supports same configuration over all machines now, anyway
-    num_gpus_per_machine = int(os.environ['SLURM_NTASKS']) // len(host_list)
+    num_workers_per_machine = max(int(os.environ['SLURM_NTASKS']) // len(host_list), 1)
     local_id = int(os.environ['SLURM_LOCALID'])
     rank = int(os.environ['SLURM_PROCID'])
     tf_config_json = {
@@ -214,10 +214,10 @@ def set_tf_config():
     }
 
     for host_idx, host in enumerate(host_list):
-        for task_id in range(num_gpus_per_machine):
+        for task_id in range(num_workers_per_machine):
             tf_config_json['cluster']['worker'].append('{}:{}'.format(host, start_port+task_id))
             if host == local_name and task_id == local_id:
-                tf_config_json['task']['index'] = (num_gpus_per_machine * host_idx) + local_id
+                tf_config_json['task']['index'] = (num_workers_per_machine * host_idx) + local_id
     assert tf_config_json['task']['index'] != -1, '{} {} {}'.format(tf_config_json, local_name, local_id)
     print(tf_config_json)
     os.environ['TF_CONFIG'] = json.dumps(tf_config_json)
