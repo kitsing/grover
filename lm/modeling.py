@@ -901,6 +901,7 @@ def nce_model_fn_builder(config: GroverConfig, init_checkpoint,
         if get_full_score:
             assert gen_model is not None
 
+
         tf.logging.info("**** Trainable Variables ****")
         for var in tvars:
             init_string = ""
@@ -1002,7 +1003,7 @@ def initialize_from_context(initial_context, ignore_ids, news_config, p_for_topp
 
 
 def sample(news_config: GroverConfig, initial_context, eos_token, ignore_ids=None, p_for_topp=0.95,
-           do_topk=False, seed: Optional[int] = None):
+           do_topk=False, seed: Optional[int] = None, max_out_tensor: bool = False):
     """
     V1 version of: sample outputs from a model, and do it all at once
     :param news_config: Configuration used to construct the model
@@ -1039,6 +1040,8 @@ def sample(news_config: GroverConfig, initial_context, eos_token, ignore_ids=Non
             return [new_ids, new_cache, new_probs]
 
         def cond(ctx, cache, probs):
+            if max_out_tensor:
+                return True
             is_eos = tf.equal(ctx, eos_token)
             return tf.math.logical_not(tf.reduce_all(tf.reduce_any(is_eos, axis=1)))
 
@@ -1054,6 +1057,7 @@ def sample(news_config: GroverConfig, initial_context, eos_token, ignore_ids=Non
                               ],
             back_prop=False,
         )
+
     return tokens, probs
 
 
