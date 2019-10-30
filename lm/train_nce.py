@@ -201,7 +201,9 @@ def set_tf_config():
     start_port = 12345
 
     local_name = os.environ['SLURMD_NODENAME']
-    num_gpus_per_machine = os.environ['SLURM_NTASKS_PER_NODE']
+    # FIXME this is brittle because we may not have same # of gpus per machine
+    # FIXME however tf only supports same configuration over all machines now, anyway
+    num_gpus_per_machine = os.environ['SLURM_NTASKS'] // len(host_list)
     local_id = os.environ['SLURM_LOCALID']
     rank = int(os.environ['SLURM_PROCID'])
     tf_config_json = {
