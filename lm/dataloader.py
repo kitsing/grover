@@ -36,12 +36,11 @@ def _decode_record_with_noise(record, noise, name_to_features, noise_name_to_fea
     example = tf.parse_single_example(record, name_to_features)
     # tf.Example only supports tf.int64, but the TPU only supports tf.int32.
     # So cast all int64 to int32.
-    if False:
-        for name in list(example.keys()):
-            t = example[name]
-            if t.dtype == tf.int64:
-                t = tf.cast(t, tf.int32)
-            example[name] = t
+    for name in list(example.keys()):
+        t = example[name]
+        if t.dtype == tf.int64:
+            t = tf.cast(t, tf.int32)
+        example[name] = t
     example['noises'] = tf.cast(noise, tf.int32)
     return example
 
