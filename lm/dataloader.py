@@ -50,7 +50,7 @@ def nce_input_fn_builder(input_files, noise_files, k,
                          is_training,
                          num_cpu_threads=4,
                          evaluate_for_fixed_number_of_steps=True,
-                         input_batch_size=1,
+                         input_batch_size=1, strategy=None
                          ):
     """Creates an `input_fn` closure to be passed to TPUEstimator."""
     from sample.encoder import get_encoder
@@ -154,7 +154,7 @@ def nce_input_fn_builder(input_files, noise_files, k,
                 batch_size=batch_size,
                 num_parallel_batches=num_cpu_threads,
                 drop_remainder=True))
-        return d
+        return strategy.experimental_distribute_dataset(d)
 
     def parallel_interleave_shuffle(input_files, input_context = None):
         d = tf.data.Dataset.from_tensor_slices(tf.constant(input_files))

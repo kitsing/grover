@@ -174,14 +174,16 @@ def main(_):
                                           noise_files=noise_files,
                                           seq_length=FLAGS.max_seq_length,
                                           is_training=True,
-                                          input_batch_size=FLAGS.train_batch_size)
+                                          input_batch_size=FLAGS.train_batch_size,
+                                          strategy=strategy)
 
     eval_input_fn = nce_input_fn_builder(k=FLAGS.k,
                                          input_files=input_dev_files,
                                          noise_files=noise_dev_files,
                                          seq_length=FLAGS.max_seq_length,
                                          is_training=False,
-                                         input_batch_size=FLAGS.train_batch_size)
+                                         input_batch_size=FLAGS.train_batch_size,
+                                         strategy=strategy)
 
     tf.estimator.train_and_evaluate(est,
                                     train_spec=tf.estimator.TrainSpec(input_fn=train_input_fn, max_steps=1000000),
