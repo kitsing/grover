@@ -146,8 +146,8 @@ def main(_):
     # for input_file in input_files:
     #     tf.logging.info("  %s" % input_file)
 
-    run_config = tf.ConfigProto(allow_soft_placement=True, log_device_placement=True)
-
+    run_config = tf.ConfigProto(allow_soft_placement=True, log_device_placement=True, )
+    run_config.gpu_options.allow_growth = True
     model_dir = FLAGS.output_dir
 
     model_fn = nce_model_fn_builder(news_config, init_checkpoint=FLAGS.init_checkpoint,
@@ -174,8 +174,7 @@ def main(_):
                                           noise_files=noise_files,
                                           seq_length=FLAGS.max_seq_length,
                                           is_training=True,
-                                          input_batch_size=FLAGS.train_batch_size,
-                                          num_replicas=strategy.num_replicas_in_sync)
+                                          input_batch_size=FLAGS.train_batch_size)
 
     eval_input_fn = nce_input_fn_builder(k=FLAGS.k,
                                          input_files=input_dev_files,

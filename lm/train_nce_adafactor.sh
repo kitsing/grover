@@ -37,7 +37,7 @@ fi
 num_train_steps=800000
 
 # Make sure batch size scales.
-let batch_size=1
+let batch_size=8
 
 # NODE_LIST=$( scontrol show hostname ${SLURM_JOB_NODELIST} | sed -z 's/\n/\:8,/g' )
 # NODE_LIST=${NODE_LIST%?}

@@ -51,7 +51,7 @@ def nce_input_fn_builder(input_files, noise_files, k,
                          num_cpu_threads=4,
                          evaluate_for_fixed_number_of_steps=True,
                          input_batch_size=1,
-                         num_replicas=8):
+                         ):
     """Creates an `input_fn` closure to be passed to TPUEstimator."""
     from sample.encoder import get_encoder
     encoder = get_encoder()
@@ -110,10 +110,10 @@ def nce_input_fn_builder(input_files, noise_files, k,
 
     built_gen = build_gen(noise_files, k)
 
-    def input_fn(params, input_context=None):
+    def input_fn(params, input_context: tf.distribute.InputContext = None):
         """The actual input function."""
         # batch_size = params["batch_size"]
-        batch_size = input_batch_size * num_replicas
+        batch_size = input_context.get_per_replica_batch_size(input_batch_size)
         name_to_features = {
             "input_ids": tf.FixedLenFeature([seq_length + 1], tf.int64),
         }
