@@ -174,7 +174,8 @@ def main(_):
                                           noise_files=noise_files,
                                           seq_length=FLAGS.max_seq_length,
                                           is_training=True,
-                                          input_batch_size=FLAGS.train_batch_size)
+                                          input_batch_size=FLAGS.train_batch_size,
+                                          num_replicas=strategy.num_replicas_in_sync)
 
     eval_input_fn = nce_input_fn_builder(k=FLAGS.k,
                                          input_files=input_dev_files,

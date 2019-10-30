@@ -36,12 +36,13 @@ def _decode_record_with_noise(record, noise, name_to_features, noise_name_to_fea
     example = tf.parse_single_example(record, name_to_features)
     # tf.Example only supports tf.int64, but the TPU only supports tf.int32.
     # So cast all int64 to int32.
-    for name in list(example.keys()):
-        t = example[name]
-        if t.dtype == tf.int64:
-            t = tf.cast(t, tf.int32)
-        example[name] = t
-    example['noises'] = tf.cast(noise, tf.int32)
+    if False:
+        for name in list(example.keys()):
+            t = example[name]
+            if t.dtype == tf.int64:
+                t = tf.cast(t, tf.int32)
+            example[name] = t
+    example['noises'] = noise
     return example
 
 
@@ -50,7 +51,8 @@ def nce_input_fn_builder(input_files, noise_files, k,
                          is_training,
                          num_cpu_threads=4,
                          evaluate_for_fixed_number_of_steps=True,
-                         input_batch_size=1):
+                         input_batch_size=1,
+                         num_replicas=8):
     """Creates an `input_fn` closure to be passed to TPUEstimator."""
     from sample.encoder import get_encoder
     encoder = get_encoder()
@@ -63,7 +65,7 @@ def nce_input_fn_builder(input_files, noise_files, k,
             pad_size = target_length - array.shape[axis]
             axis_nb = len(array.shape)
 
-            if pad_size < 0:
+            if pad_size <= 0:
                 return array
 
             npad = [(0, 0) for x in range(axis_nb)]
@@ -112,7 +114,7 @@ def nce_input_fn_builder(input_files, noise_files, k,
     def input_fn(params, input_context=None):
         """The actual input function."""
         # batch_size = params["batch_size"]
-        batch_size = input_batch_size
+        batch_size = input_batch_size * num_replicas
         name_to_features = {
             "input_ids": tf.FixedLenFeature([seq_length + 1], tf.int64),
         }
