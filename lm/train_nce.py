@@ -119,7 +119,7 @@ def main(_):
     strategy = \
         tf.distribute.experimental.MultiWorkerMirroredStrategy(communication=tf.distribute.experimental.CollectiveCommunication.NCCL)
 
-    tf.logging.set_verbosity(tf.logging.WARN)
+    tf.logging.set_verbosity(tf.logging.INFO)
 
     news_config = GroverConfig.from_json_file(FLAGS.config_file)
     print(news_config)
