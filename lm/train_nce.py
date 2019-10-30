@@ -200,18 +200,25 @@ def set_tf_config():
 
     start_port = 12345
 
+    local_name = os.environ['SLURMD_NODENAME']
+    num_gpus_per_machine = os.environ['SLURM_NTASKS_PER_NODE']
+    local_id = os.environ['SLURM_LOCALID']
     rank = int(os.environ['SLURM_PROCID'])
     tf_config_json = {
         'cluster': {
             'worker': []
         },
-        'task': {'type': 'worker', 'index': rank}
+        'task': {'type': 'worker', 'index': -1}
     }
+
     for host_idx, host in enumerate(host_list):
-        tf_config_json['cluster']['worker'].append('{}:{}'.format(host, start_port))
+        for task_id in range(num_gpus_per_machine):
+            tf_config_json['cluster']['worker'].append('{}:{}'.format(host, start_port+task_id))
+            if host == local_name and task_id == local_id:
+                tf_config_json['task']['index'] = (num_gpus_per_machine * host_idx) + local_id
+    assert tf_config_json['task']['index'] != -1
     print(tf_config_json)
     os.environ['TF_CONFIG'] = json.dumps(tf_config_json)
-
 
 if __name__ == "__main__":
     flags.mark_flag_as_required("input_file")

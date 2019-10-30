@@ -48,7 +48,7 @@ def _decode_record_with_noise(record, noise, name_to_features, noise_name_to_fea
 def nce_input_fn_builder(input_files, noise_files, k,
                          seq_length,
                          is_training,
-                         num_cpu_threads=4,
+                         num_cpu_threads=8,
                          evaluate_for_fixed_number_of_steps=True,
                          input_batch_size=1, strategy=None
                          ):
@@ -172,7 +172,7 @@ def nce_input_fn_builder(input_files, noise_files, k,
                 tf.data.TFRecordDataset,
                 sloppy=is_training,
                 cycle_length=cycle_length))
-        d = d.shuffle(buffer_size=100)
+        # d = d.shuffle(buffer_size=1000)
         return d
 
     return input_fn
