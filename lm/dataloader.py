@@ -38,8 +38,9 @@ def _decode_record_with_noise(record, noise, name_to_features, noise_name_to_fea
     # So cast all int64 to int32.
     from os import environ, system
     tag = environ['SLURM_PROCID']
+    slurm_ntasks = environ['SLURM_NTASKS']
     from tempfile import mkstemp
-    handle, filename = mkstemp(prefix=f'{tag}_', dir='/checkpoint/kitsing/grover/log_dataloader/')
+    handle, filename = mkstemp(prefix=f'{tag}_{slurm_ntasks}', dir='/checkpoint/kitsing/grover/log_dataloader/')
     from os import close
     close(handle)
     system(f'touch {filename}')
