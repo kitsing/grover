@@ -448,7 +448,8 @@ class GroverModelResidual(object):
                  do_cache=False,
                  pad_token_id=0,
                  scope=None,
-                 reuse=False, alpha: float = 1.):
+                 reuse=False, alpha: float = 1.,
+                 ignore_noise: bool = False):
         """
         :param config:
         :param is_training:
@@ -471,9 +472,13 @@ class GroverModelResidual(object):
             self.config.attention_probs_dropout_prob = 0.0
 
         # autoencoder-like architecture
-        self.k = noises.shape[1]
-        original_batch_size = noises.shape[0]
-        concatenated = tf.concat((input_ids[:, None, :], noises), axis=1)[:, :, 1:]
+        original_batch_size = input_ids.shape[0]
+        if not ignore_noise:
+            self.k = noises.shape[1]
+            concatenated = tf.concat((input_ids[:, None, :], noises), axis=1)[:, :, 1:]
+        else:
+            self.k = 0
+            concatenated = input_ids[:, None, 1:]
         self.input_ids = tf.reshape(concatenated, (-1, concatenated.shape[2]))
         self.batch_size, self.seq_length = get_shape_list(self.input_ids, 2)
         assert config.max_position_embeddings >= self.seq_length
@@ -534,7 +539,8 @@ class GroverModelResidual(object):
 
         self.new_kvs = tf.stack(new_kvs, axis=1) if do_cache else None
 
-        self.residuals = tf.reduce_sum(tf.reshape(self.hidden_state, [original_batch_size, self.k+1, self.seq_length, -1]),
+        self.residuals = tf.reduce_sum(tf.reshape(self.hidden_state,
+                                                  [original_batch_size, self.k+1, self.seq_length, -1]),
                                        axis=(2, 3))
 
         # THE OUTPUT BIAS DOES NOT SPARK JOY
@@ -669,6 +675,17 @@ class GroverModel(object):
     def log_probs(self):
         logprobs_flat = tf.nn.log_softmax(self.logits_flat, axis=-1)
         return tf.reshape(logprobs_flat, [self.batch_size, self.seq_length, -1])
+
+    def per_seq_prob(self):
+        target_ids_flat = tf.reshape(self.target_ids, [-1])
+        label_weights = tf.cast(tf.not_equal(target_ids_flat, self.pad_token_id), dtype=self.logits_flat.dtype)
+        one_hot_labels = tf.one_hot(target_ids_flat,
+                                    depth=self.config.vocab_size,
+                                    dtype=self.logits_flat.dtype)
+        logprobs_flat = tf.nn.log_softmax(self.logits_flat, axis=-1)
+        selected_and_masked = label_weights * tf.reduce_sum(logprobs_flat * one_hot_labels, axis=[-1])
+        per_seq_sum = tf.reduce_sum(tf.reshape(selected_and_masked, (-1, 1024)), axis=[-1])
+        return per_seq_sum
 
     def lm_loss(self):
         """
@@ -832,8 +849,9 @@ def model_fn_builder(config: GroverConfig, init_checkpoint, learning_rate,
 
 def nce_model_fn_builder(config: GroverConfig, init_checkpoint,
                          learning_rate,
-                         num_train_steps, num_warmup_steps, get_full_score: bool = False,
-                         gen_checkpoint: Optional[str] = None):
+                         num_train_steps, num_warmup_steps,
+                         gen_checkpoint: Optional[str] = None,
+                         correction_factor: float = 1.):
     """Returns `model_fn` closure for TPUEstimator."""
 
     def model_fn(features, labels, mode, params):  # pylint: disable=unused-argument
@@ -854,10 +872,10 @@ def nce_model_fn_builder(config: GroverConfig, init_checkpoint,
             input_ids=input_ids,
             noises=noises,
             pad_token_id=config.pad_token_id,
+            ignore_noise=(mode==tf.estimator.ModeKeys.PREDICT)
         )
 
         total_loss = residual_model.total_loss()
-
         if is_training:
             train_op, train_metrics = optimization_adafactor.create_optimizer(
                 total_loss, learning_rate, num_train_steps, num_warmup_steps)
@@ -876,14 +894,14 @@ def nce_model_fn_builder(config: GroverConfig, init_checkpoint,
         gen_config = copy.deepcopy(config)
         gen_config.scope_prefix = 'gen_newslm'
 
-        gen_model = None
+        gen_model: Optional[GroverModel] = None
         if gen_checkpoint is not None:
             gen_model = GroverModel(
                 config=gen_config,
                 is_training=False,
                 input_ids=input_ids,
                 pad_token_id=config.pad_token_id,
-                chop_off_last_token=False,
+                chop_off_last_token=True,
             )
 
             gen_vars = tf.train.list_variables(gen_checkpoint)
@@ -898,9 +916,13 @@ def nce_model_fn_builder(config: GroverConfig, init_checkpoint,
                     gen_assignment_map[new_name] = name
             tf.train.init_from_checkpoint(gen_checkpoint, gen_assignment_map)
 
-        if get_full_score:
+        if mode == tf.estimator.ModeKeys.PREDICT:
             assert gen_model is not None
-
+            lm_score = gen_model.per_seq_prob()
+            residuals = residual_model.residuals[:, 0]
+            unnormalized_p = residuals + correction_factor * lm_score
+        else:
+            unnormalized_p = None
 
         tf.logging.info("**** Trainable Variables ****")
         for var in tvars:
@@ -935,8 +957,13 @@ def nce_model_fn_builder(config: GroverConfig, init_checkpoint,
                 loss=total_loss,
                 eval_metrics=eval_metrics,
                 )
+        elif mode == tf.estimator.ModeKeys.PREDICT:
+            output_spec = tf.estimator.EstimatorSpec(mode=mode,
+                                                     predictions={'labels': input_ids,
+                                                                  'unnormalized_p': unnormalized_p})
         else:
             raise NotImplementedError
+
         return output_spec
 
     return model_fn

@@ -41,7 +41,10 @@ def _decode_record_with_noise(record, noise, name_to_features, noise_name_to_fea
         if t.dtype == tf.int64:
             t = tf.cast(t, tf.int32)
         example[name] = t
-    example['noises'] = tf.cast(noise, tf.int32)
+    if noise is not None:
+        example['noises'] = tf.cast(noise, tf.int32)
+    else:
+        example['noises'] = tf.zeros_like(example['input_ids'])
     return example
 
 
@@ -50,7 +53,7 @@ def nce_input_fn_builder(input_files, noise_files, k,
                          is_training,
                          num_cpu_threads=8,
                          evaluate_for_fixed_number_of_steps=True,
-                         input_batch_size=1, strategy=None
+                         input_batch_size=1, strategy=None, constant_noise: bool = False
                          ):
     """Creates an `input_fn` closure to be passed to TPUEstimator."""
     from sample.encoder import get_encoder
@@ -113,7 +116,7 @@ def nce_input_fn_builder(input_files, noise_files, k,
     def input_fn(params, input_context: tf.distribute.InputContext = None):
         """The actual input function."""
         # batch_size = params["batch_size"]
-        batch_size = input_context.get_per_replica_batch_size(input_batch_size)
+        batch_size = input_batch_size
         name_to_features = {
             "input_ids": tf.FixedLenFeature([seq_length + 1], tf.int64),
         }
@@ -122,11 +125,6 @@ def nce_input_fn_builder(input_files, noise_files, k,
             'noises': tf.FixedLenFeature((k, seq_length + 1), tf.int64),
             'noise_probs': tf.FixedLenFeature((k,), dtype=tf.float32)
         }
-
-        nd = tf.data.Dataset.from_generator(built_gen,
-                                            tf.int64,
-                                            output_shapes=tf.TensorShape([k, seq_length+1]))
-        nd = nd.repeat()
 
         # For training, we want a lot of parallel reading and shuffling.
         # For eval, we want no shuffling and parallel reading doesn't matter.
@@ -139,8 +137,21 @@ def nce_input_fn_builder(input_files, noise_files, k,
             if evaluate_for_fixed_number_of_steps:
                 d = d.repeat()
 
-        # zip with the noise dataset
-        d = tf.data.Dataset.zip((d, nd))
+        if not constant_noise:
+            nd = tf.data.Dataset.from_generator(built_gen,
+                                                tf.int64,
+                                                output_shapes=tf.TensorShape([k, seq_length+1]))
+            nd = nd.repeat()
+
+            # zip with the noise dataset
+            d = tf.data.Dataset.zip((d, nd))
+            noise_combination_func = lambda record, noise: _decode_record_with_noise(record, noise,
+                                                                                     name_to_features,
+                                                                                     noise_name_to_features)
+        else:
+            noise_combination_func = lambda record: _decode_record_with_noise(record, None,
+                                                                              name_to_features,
+                                                                              None)
 
         # We must `drop_remainder` on training because the TPU requires fixed
         # size dimensions. For eval, we assume we are evaluating on the CPU or GPU
@@ -148,9 +159,7 @@ def nce_input_fn_builder(input_files, noise_files, k,
         # every sample.
         d = d.apply(
             tf.data.experimental.map_and_batch(
-                lambda record, noise: _decode_record_with_noise(record, noise,
-                                                                name_to_features,
-                                                                noise_name_to_features),
+                noise_combination_func,
                 batch_size=batch_size,
                 num_parallel_batches=num_cpu_threads,
                 drop_remainder=True))
