@@ -10,7 +10,7 @@ learning_rate=1e-4
 init_checkpoint=""
 max_seq_length=1024
 save_checkpoint_steps=1000
-K=8
+K=2
 
 # You can customize the training here
 # mega, medium, or base
@@ -37,7 +37,7 @@ fi
 num_train_steps=800000
 
 # Make sure batch size scales.
-let batch_size=64
+let batch_size=${SLURM_NTASKS}
 
 # NODE_LIST=$( scontrol show hostname ${SLURM_JOB_NODELIST} | sed -z 's/\n/\:8,/g' )
 # NODE_LIST=${NODE_LIST%?}
