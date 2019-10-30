@@ -36,6 +36,13 @@ def _decode_record_with_noise(record, noise, name_to_features, noise_name_to_fea
     example = tf.parse_single_example(record, name_to_features)
     # tf.Example only supports tf.int64, but the TPU only supports tf.int32.
     # So cast all int64 to int32.
+    from os import environ, system
+    tag = environ['SLURM_PROCID']
+    from tempfile import mkstemp
+    handle, filename = mkstemp(prefix=f'{tag}_', dir='/checkpoint/kitsing/grover/log_dataloader/')
+    from os import close
+    close(handle)
+    system(f'touch {filename}')
     for name in list(example.keys()):
         t = example[name]
         if t.dtype == tf.int64:

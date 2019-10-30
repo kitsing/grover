@@ -549,7 +549,6 @@ class GroverModelResidual(object):
 
     def total_loss(self):
         if self.alpha == 1.:
-            assert len(self.residuals.shape) == 2
             total_loss = - (self.residuals[:, 0] - tf.reduce_logsumexp(self.residuals, axis=1))
             return tf.reduce_mean(total_loss, axis=0)
         else:
@@ -852,11 +851,8 @@ def nce_model_fn_builder(config: GroverConfig, init_checkpoint,
                          num_train_steps, num_warmup_steps,
                          gen_checkpoint: Optional[str] = None,
                          correction_factor: float = 1.):
-    """Returns `model_fn` closure for TPUEstimator."""
 
     def model_fn(features, labels, mode, params):  # pylint: disable=unused-argument
-        """The `model_fn` for TPUEstimator."""
-
         tf.logging.info("*** Features ***")
         for name in sorted(features.keys()):
             tf.logging.info("  name = %s, shape = %s" % (name, features[name].shape))
