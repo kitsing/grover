@@ -96,10 +96,11 @@ def restore(scope, checkpoint):
 
 with tf.Session(config=tf_config, graph=tf.Graph()) as sess:
     tokens = tf.placeholder(tf.int32, [args.batch_size, args.seq_length])
+    tokens_reshaped = tf.reshape(tokens, (args.num_gpus, -1, args.seq_length))
     all_probs = []
     for i in range(args.num_gpus):
         with tf.device('/gpu:' + str(i)):
-            probs = eval_seq(news_config, tokens, args.correction_factor)
+            probs = eval_seq(news_config, tokens_reshaped[i], args.correction_factor)
             all_probs.append(probs)
 
     with tf.device('/cpu:0'):
