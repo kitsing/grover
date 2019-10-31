@@ -42,7 +42,7 @@ parser.add_argument(
 )
 parser.add_argument('--files', default='./*.npz', type=str)
 parser.add_argument('--seed', default=42, type=int)
-parser.add_argument('--correction-factor', default=1., type=float)
+parser.add_argument('--correction-factor', default=1., type=float) # correction factor: 14136832/13628509
 parser.add_argument('--seq-length', default=1025, type=int)
 
 parser.add_argument('--output-path', default='./', type=str)
