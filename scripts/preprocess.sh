@@ -28,9 +28,10 @@ ON_CLUSTER=1
 mkdir -p "${MODEL_PATH}"
 export PYTHONPATH=$(pwd)
 RUN_STRING="python realnews/prepare_unconditioned_lm_data.py \
-            -num_folds ${NUM_FOLDS}
+            -num_folds ${NUM_FOLDS} \
             -base_fn ${MODEL_PATH}/preprocessed_ \
-            -input_fn ${DATA_PATH}"
+            -input_fn ${DATA_PATH} \
+            --seed 42"
 
 echo "${RUN_STRING}"
 if [[ ${ON_CLUSTER} -eq 1 ]]; then

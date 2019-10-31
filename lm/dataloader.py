@@ -85,15 +85,6 @@ def nce_input_fn_builder(input_files, noise_files, k,
             remainder = []
             remainder_len = 0
             while len(fname_list) > 0:
-                from os import environ, system
-                tag = environ['SLURM_PROCID']
-                slurm_ntasks = environ['SLURM_NTASKS']
-                from tempfile import mkstemp
-                handle, filename = mkstemp(prefix=f'{tag}_{slurm_ntasks}',
-                                           dir='/checkpoint/kitsing/grover/log_dataloader/')
-                from os import close
-                close(handle)
-                system(f'touch {filename}')
                 while remainder_len >= batch_size:
                     concat = np.concatenate(remainder, axis=0)
                     to_yield = concat[:batch_size]
@@ -101,6 +92,7 @@ def nce_input_fn_builder(input_files, noise_files, k,
                     remainder_len = remainder[0].shape[0]
                     yield to_yield
                 np_filename = fname_list.pop()
+                tf.logging.info(f'reading {np_filename}',)
                 with np.load(np_filename) as loaded:
                     s = loaded['tokens']
                     s = s[(s == end_symbol).argmax(axis=1) > 0] # filter out rows where we cannot find an EOS symbol
@@ -173,7 +165,7 @@ def nce_input_fn_builder(input_files, noise_files, k,
                 batch_size=batch_size,
                 num_parallel_batches=num_cpu_threads,
                 drop_remainder=True))
-        return d
+        return d.prefetch(128)
 
     def parallel_interleave_shuffle(input_files, input_context = None):
         d = tf.data.Dataset.from_tensor_slices(tf.constant(input_files))
