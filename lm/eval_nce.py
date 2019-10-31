@@ -120,6 +120,12 @@ with tf.Session(config=tf_config, graph=tf.Graph()) as sess:
             for batch in tqdm(range(num_batches), disable=None):
                 this_batch: np.ndarray = all_seqs[args.batch_size * batch: args.batch_size * (batch + 1)]
                 feed_dict = {}
+                remainder = this_batch.shape % args.num_gpus
+
+                # pad to fill all GPUs
+                if remainder != 0:
+                    to_append = np.zeros((args.num_gpus - remainder, args.seq_length), dtype=this_batch.dtype)
+                    this_batch = np.concatenate((this_batch, to_append), axis=0)
                 splitted_batch = np.split(this_batch, args.num_gpus)
                 for tok, b in zip(all_tokens, splitted_batch):
                     feed_dict[tok] = b
@@ -127,6 +133,6 @@ with tf.Session(config=tf_config, graph=tf.Graph()) as sess:
                                      feed_dict=feed_dict)
 
                 final_prob_outputs.append(probs_out)
-        final_prob_tensor = np.concatenate(final_prob_outputs, axis=0)
+        final_prob_tensor = np.concatenate(final_prob_outputs, axis=0)[:all_seqs.shape[0]]
         output_fname = f'{args.output_path}/{basename(f)}.out.npz'
         np.savez(output_fname, unnormalized_probs=final_prob_tensor)
