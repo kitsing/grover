@@ -100,7 +100,7 @@ with tf.Session(config=tf_config, graph=tf.Graph()) as sess:
     all_probs = []
     for i in range(args.num_gpus):
         with tf.device('/gpu:' + str(i)):
-            tokens = tf.placeholder(tf.int32, [None, args.seq_length])
+            tokens = tf.placeholder(tf.int32, [args.batch_size // args.num_gpus, args.seq_length])
             all_tokens.append(tokens)
             probs = eval_seq(news_config, tokens, args.correction_factor)
             all_probs.append(probs)
