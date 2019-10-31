@@ -38,7 +38,7 @@ def main():
             break
         example.ParseFromString(record)
         record = example.features.feature['input_ids'].int64_list.value
-        parsed_length = sum([_ for _ in record if _ != args.pad])
+        parsed_length = sum([1 for _ in record if _ != args.pad])
         position = random.randint(1, parsed_length - 2)
         answer = record[position]
 
