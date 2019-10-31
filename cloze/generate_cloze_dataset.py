@@ -4,6 +4,7 @@ import numpy as np
 import random
 from sample.encoder import get_encoder
 from os.path import basename
+from os import environ
 
 def parse_args():
     from argparse import ArgumentParser
@@ -21,6 +22,8 @@ def parse_args():
 
 def main():
     args = parse_args()
+    if 'SLURM_PROCID' in environ:
+        args.seed = args.seed + int(environ['SLURM_PROCID'])
     random.seed(args.seed)
     encoder = get_encoder()
 
