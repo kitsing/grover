@@ -34,17 +34,16 @@ def main():
     for record_idx, record in enumerate(tf.python_io.tf_record_iterator(args.file)):
         if record_idx < args.choice:
             continue
-        if record_idx > args.choice:
-            break
         example.ParseFromString(record)
-        record = example.features.feature['input_ids'].int64_list.value
+        record = [int(_) for _ in example.features.feature['input_ids'].int64_list.value]
+        print(record)
         parsed_length = sum([1 for _ in record if _ != args.pad])
         position = random.randint(1, parsed_length - 2)
         answer = record[position]
+        break
 
     expanded = np.array(record)
-    expanded = np.tile(expanded, len(encoder))
-
+    expanded = np.tile(expanded, (len(encoder), 1)).reshape((len(encoder), 1025))
     expanded[:, position] = np.arange(len(encoder))
 
     out_fname = f'{args.output_path}/{basename(args.file)}.npz'
