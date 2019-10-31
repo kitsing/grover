@@ -1039,7 +1039,7 @@ def eval_seq(news_config: GroverConfig, tokens, correction_factor = 1.):
             noises=None,
             pad_token_id=news_config.pad_token_id,
             ignore_noise=True,
-            scope='newslm'
+            scope='dis'
         )
 
         gen_model = GroverModel(

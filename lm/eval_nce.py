@@ -92,13 +92,24 @@ with tf.Session(config=tf_config, graph=tf.Graph()) as sess:
         if len(splitted_name) > 1:
             new_name = ''.join(['gen'] + splitted_name[1:])
             tf.logging.info(f'new name: {new_name}')
-            gen_assignment_map[new_name] = name
-
+            gen_assignment_map[new_name] = var
+    print(gen_assignment_map)
     saver = tf.train.Saver(var_list=gen_assignment_map)
     saver.restore(sess, args.gen_model_ckpt)
 
-    dis_saver = tf.train.Saver()
-    dis_saver.restore(sess, args.dis_model_ckpt)
+    dis_vars = tf.train.list_variables(args.dis_model_ckpt)
+    dis_assignment_map = dict()
+    for v in dis_vars:
+        name, var = v
+        splitted_name = name.split('newslm')
+        tf.logging.info(f'found in gen_checkpoint: {name}')
+        if len(splitted_name) > 1:
+            new_name = ''.join(['dis'] + splitted_name[1:])
+            tf.logging.info(f'new name: {new_name}')
+            dis_assignment_map[new_name] = var
+    print(dis_assignment_map)
+    saver = tf.train.Saver(var_list=dis_assignment_map)
+    saver.restore(sess, args.dis_model_ckpt)
 
     # Let's go!
     for f in tqdm(our_files, disable=None):
