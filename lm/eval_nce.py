@@ -89,6 +89,8 @@ with tf.Session(config=tf_config, graph=tf.Graph()) as sess:
     gen_assignment_map = dict()
     for var in gen_vars:
         name = var.name
+        assert name.endswith(':0')
+        name = name[:-2]
         splitted_name = name.split('gen')
         if len(splitted_name) > 1:
             new_name = ''.join(['newslm'] + splitted_name[1:])
