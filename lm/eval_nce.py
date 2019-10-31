@@ -103,7 +103,9 @@ with tf.Session(config=tf_config, graph=tf.Graph()) as sess:
     dis_vars = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope='dis')
     dis_assignment_map = dict()
     for var in dis_vars:
-        name = var.name
+        name: str = var.name
+        assert name.endswith(':0')
+        name = name[:-2]
         splitted_name = name.split('dis')
         tf.logging.info(f'found in gen_checkpoint: {name}')
         if len(splitted_name) > 1:
