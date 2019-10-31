@@ -89,7 +89,7 @@ def restore(scope, checkpoint):
                 gen_assignment_map[new_name] = var
             else:
                 tf.logging.warn(f'key not found: {new_name}')
-    print(gen_assignment_map)
+    # print(gen_assignment_map)
     saver = tf.train.Saver(var_list=gen_assignment_map)
     saver.restore(sess, checkpoint)
 
