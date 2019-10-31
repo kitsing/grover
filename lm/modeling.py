@@ -1038,7 +1038,8 @@ def eval_seq(news_config: GroverConfig, tokens, correction_factor = 1.):
             reuse=tf.AUTO_REUSE,
             noises=None,
             pad_token_id=news_config.pad_token_id,
-            ignore_noise=True
+            ignore_noise=True,
+            scope='newslm'
         )
 
         gen_model = GroverModel(
