@@ -42,7 +42,9 @@ def main():
         position = random.randint(1, parsed_length - 2)
         answer = record[position]
 
-    expanded = np.array([record,] * len(encoder), dtype=np.int)
+    expanded = np.array(record)
+    expanded = np.tile(expanded, len(encoder))
+
     expanded[:, position] = np.arange(len(encoder))
 
     out_fname = f'{args.output_path}/{basename(args.file)}.npz'
