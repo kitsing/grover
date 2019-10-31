@@ -1048,7 +1048,7 @@ def eval_seq(news_config: GroverConfig, tokens, correction_factor = 1.):
             input_ids=tokens,
             reuse=tf.AUTO_REUSE,
             scope='gen',
-            chop_off_last_token=False,
+            chop_off_last_token=True,
             do_cache=True,
             cache=None,
         )
