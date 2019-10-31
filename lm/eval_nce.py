@@ -119,7 +119,7 @@ with tf.Session(config=tf_config, graph=tf.Graph()) as sess:
             num_batches = all_seqs.shape[0] // args.batch_size
             for batch in tqdm(range(num_batches), disable=None):
                 this_batch: np.ndarray = all_seqs[args.batch_size * batch: args.batch_size * (batch + 1)]
-                feed_dict = {tokens: this_batch}
+                feed_dict = {}
                 splitted_batch = np.split(this_batch, args.num_gpus)
                 for tok, b in zip(all_tokens, splitted_batch):
                     feed_dict[tok] = b
