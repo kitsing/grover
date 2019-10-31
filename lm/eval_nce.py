@@ -95,12 +95,14 @@ def restore(scope, checkpoint):
 
 
 with tf.Session(config=tf_config, graph=tf.Graph()) as sess:
-    tokens = tf.placeholder(tf.int32, [args.batch_size, args.seq_length])
-    tokens_reshaped = tf.reshape(tokens, (args.num_gpus, -1, args.seq_length))
+    all_tokens = []
+
     all_probs = []
     for i in range(args.num_gpus):
         with tf.device('/gpu:' + str(i)):
-            probs = eval_seq(news_config, tokens_reshaped[i], args.correction_factor)
+            tokens = tf.placeholder(tf.int32, [args.batch_size, args.seq_length])
+            all_tokens.append(tokens)
+            probs = eval_seq(news_config, tokens, args.correction_factor)
             all_probs.append(probs)
 
     with tf.device('/cpu:0'):
@@ -116,9 +118,13 @@ with tf.Session(config=tf_config, graph=tf.Graph()) as sess:
             all_seqs = loaded_numpy['cloze']
             num_batches = all_seqs.shape[0] // args.batch_size
             for batch in tqdm(range(num_batches), disable=None):
-                this_batch = all_seqs[args.batch_size * batch: args.batch_size * (batch + 1)]
+                this_batch: np.ndarray = all_seqs[args.batch_size * batch: args.batch_size * (batch + 1)]
+                feed_dict = {tokens: this_batch}
+                splitted_batch = np.split(this_batch, args.num_gpus)
+                for tok, b in zip(all_tokens, splitted_batch):
+                    feed_dict[tok] = b
                 probs_out = sess.run([merged_probs],
-                                     feed_dict={tokens: this_batch})
+                                     feed_dict=feed_dict)
 
                 final_prob_outputs.append(probs_out)
         final_prob_tensor = np.concatenate(final_prob_outputs, axis=0)
