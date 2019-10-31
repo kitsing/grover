@@ -72,6 +72,28 @@ print('end: {}'.format(encoder.__dict__['end_article']))
 
 tf_config = tf.ConfigProto(allow_soft_placement=True)
 
+
+def restore(scope, checkpoint):
+    gen_vars = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope=scope)
+    gen_checkpoint_vars = tf.train.list_variables(checkpoint)
+    gen_checkpoint_names = [_[0] for _ in gen_checkpoint_vars]
+    gen_assignment_map = dict()
+    for var in gen_vars:
+        name = var.name
+        assert name.endswith(':0')
+        name = name[:-2]
+        splitted_name = name.split(scope)
+        if len(splitted_name) > 1:
+            new_name = ''.join(['newslm'] + splitted_name[1:])
+            if new_name in gen_checkpoint_names:
+                gen_assignment_map[new_name] = var
+            else:
+                tf.logging.warn(f'key not found: {new_name}')
+    print(gen_assignment_map)
+    saver = tf.train.Saver(var_list=gen_assignment_map)
+    saver.restore(sess, checkpoint)
+
+
 with tf.Session(config=tf_config, graph=tf.Graph()) as sess:
     tokens = tf.placeholder(tf.int32, [args.batch_size, args.seq_length])
     all_probs = []
@@ -83,40 +105,8 @@ with tf.Session(config=tf_config, graph=tf.Graph()) as sess:
     with tf.device('/cpu:0'):
         merged_probs = tf.concat(all_probs, axis=0)
 
-    gen_vars = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope='gen')
-    gen_checkpoint_vars = tf.train.list_variables(args.gen_model_ckpt)
-    gen_checkpoint_names = [_[0] for _ in gen_checkpoint_vars]
-    gen_assignment_map = dict()
-    for var in gen_vars:
-        name = var.name
-        assert name.endswith(':0')
-        name = name[:-2]
-        splitted_name = name.split('gen')
-        if len(splitted_name) > 1:
-            new_name = ''.join(['newslm'] + splitted_name[1:])
-            if new_name in gen_checkpoint_names:
-                gen_assignment_map[new_name] = var
-            else:
-                tf.logging.warn(f'key not found: {new_name}')
-    print(gen_assignment_map)
-    saver = tf.train.Saver(var_list=gen_assignment_map)
-    saver.restore(sess, args.gen_model_ckpt)
-
-    dis_vars = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope='dis')
-    dis_assignment_map = dict()
-    for var in dis_vars:
-        name: str = var.name
-        assert name.endswith(':0')
-        name = name[:-2]
-        splitted_name = name.split('dis')
-        tf.logging.info(f'found in gen_checkpoint: {name}')
-        if len(splitted_name) > 1:
-            new_name = ''.join(['newslm'] + splitted_name[1:])
-            tf.logging.info(f'new name: {new_name}')
-            dis_assignment_map[new_name] = var
-    print(dis_assignment_map)
-    saver = tf.train.Saver(var_list=dis_assignment_map)
-    saver.restore(sess, args.dis_model_ckpt)
+    restore('gen', args.gen_model_ckpt)
+    restore('dis', args.dis_model_ckpt)
 
     # Let's go!
     for f in tqdm(our_files, disable=None):
