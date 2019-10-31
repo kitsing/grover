@@ -1,16 +1,16 @@
 #!/usr/bin/env bash
-module purge
-module load anaconda3/5.0.1 cuda/10.0 git/2.15.1/gcc.5.4.0 gcc/7.1.0 tmux/2.8/gcc.7.3.0 vim/8.1.0788/gcc.7.3.0 torch/080919/cudnn.7.6.2 NCCL/2.4.8-1-cuda.10.0 openmpi/3.1.1/gcc.7.3.0 java
+# module purge
+# module load anaconda3/5.0.1 cuda/10.0 git/2.15.1/gcc.5.4.0 gcc/7.1.0 tmux/2.8/gcc.7.3.0 vim/8.1.0788/gcc.7.3.0 torch/080919/cudnn.7.6.2 NCCL/2.4.8-1-cuda.10.0 openmpi/3.1.1/gcc.7.3.0 java
 . /public/apps/anaconda3/5.0.1/etc/profile.d/conda.sh
-conda deactivate
-conda activate grover
+# conda deactivate
+# conda activate grover
 export PYTHONPATH=$(pwd)
 
 learning_rate=1e-4
 init_checkpoint=""
 max_seq_length=1024
 save_checkpoint_steps=1000
-K=2
+K=8
 
 # You can customize the training here
 # mega, medium, or base
