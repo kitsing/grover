@@ -36,14 +36,7 @@ def _decode_record_with_noise(record, noise, name_to_features, noise_name_to_fea
     example = tf.parse_single_example(record, name_to_features)
     # tf.Example only supports tf.int64, but the TPU only supports tf.int32.
     # So cast all int64 to int32.
-    from os import environ, system
-    tag = environ['SLURM_PROCID']
-    slurm_ntasks = environ['SLURM_NTASKS']
-    from tempfile import mkstemp
-    handle, filename = mkstemp(prefix=f'{tag}_{slurm_ntasks}', dir='/checkpoint/kitsing/grover/log_dataloader/')
-    from os import close
-    close(handle)
-    system(f'touch {filename}')
+
     for name in list(example.keys()):
         t = example[name]
         if t.dtype == tf.int64:
@@ -92,6 +85,15 @@ def nce_input_fn_builder(input_files, noise_files, k,
             remainder = []
             remainder_len = 0
             while len(fname_list) > 0:
+                from os import environ, system
+                tag = environ['SLURM_PROCID']
+                slurm_ntasks = environ['SLURM_NTASKS']
+                from tempfile import mkstemp
+                handle, filename = mkstemp(prefix=f'{tag}_{slurm_ntasks}',
+                                           dir='/checkpoint/kitsing/grover/log_dataloader/')
+                from os import close
+                close(handle)
+                system(f'touch {filename}')
                 while remainder_len >= batch_size:
                     concat = np.concatenate(remainder, axis=0)
                     to_yield = concat[:batch_size]
