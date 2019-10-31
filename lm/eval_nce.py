@@ -84,9 +84,10 @@ with tf.Session(config=tf_config, graph=tf.Graph()) as sess:
         merged_probs = tf.concat(all_probs, axis=0)
 
     gen_vars = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope='gen')
+    print(gen_vars)
     gen_assignment_map = dict()
-    for v in gen_vars:
-        name, var = v
+    for var in gen_vars:
+        name = var.name
         splitted_name = name.split('gen')
         tf.logging.info(f'found in gen_checkpoint: {name}')
         if len(splitted_name) > 1:
@@ -99,8 +100,8 @@ with tf.Session(config=tf_config, graph=tf.Graph()) as sess:
 
     dis_vars = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope='dis')
     dis_assignment_map = dict()
-    for v in dis_vars:
-        name, var = v
+    for var in dis_vars:
+        name = var.name
         splitted_name = name.split('dis')
         tf.logging.info(f'found in gen_checkpoint: {name}')
         if len(splitted_name) > 1:
