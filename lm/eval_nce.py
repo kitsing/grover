@@ -1,214 +1,117 @@
-# Original work Copyright 2018 The Google AI Language Team Authors.
-# Modified work Copyright 2019 Rowan Zellers
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
-""" Training script! """
 import tensorflow as tf
+import numpy as np
+import sys
+import argparse
+from glob import glob
 
-from lm.dataloader import nce_input_fn_builder
-from lm.modeling import nce_model_fn_builder, GroverConfig
+sys.path.append('../')
+from lm.modeling import GroverConfig, eval_seq
+from sample.encoder import get_encoder
+from tqdm import tqdm
+from os import environ
+from os.path import basename
+from random import seed as rnd_seed
 
-flags = tf.flags
+parser = argparse.ArgumentParser(description='Evaluation')
+parser.add_argument(
+    '--model-config-fn',
+    dest='model_config_fn',
+    default='../lm/configs/base.json',
+    type=str,
+    help='Configuration JSON for the model',
+)
+parser.add_argument(
+    '--gen-model-ckpt',
+    default='../models/base/model.ckpt',
+    type=str,
+    help='Grover checkpoint file for the model',
+)
+parser.add_argument(
+    '--dis-model-ckpt',
+    dest='dis_model_ckpt',
+    default='',
+    type=str,
+    help='discriminator checkpoint file for the model',
+)
+parser.add_argument(
+    '--batch-size',
+    dest='batch_size',
+    default=50,
+    type=int,
+    help='How many things to generate per context. will split into chunks if need be',
+)
+parser.add_argument('--files', default='./*.npz', type=str)
+parser.add_argument('--seed', default=42, type=int)
+parser.add_argument('--correction-factor', default=1., type=float)
+parser.add_argument('--seq-length', default=1025, type=int)
 
-FLAGS = flags.FLAGS
+parser.add_argument('--output-path', default='./', type=str)
+parser.add_argument('--num-gpus', default=8, type=int)
 
-## Required parameters
-flags.DEFINE_string(
-    "config_file", 'configs/base.json',
-    "The config json file corresponding to the pre-trained news model. "
-    "This specifies the model architecture.")
+parser.add_argument('--load')
 
-flags.DEFINE_string(
-    "input_file", None,
-    "Input TF example files (can be a glob or comma separated).")
+args = parser.parse_args()
+args.fold = int(environ['SLURM_PROCID'])
+args.num_folds = int(environ['SLURM_NTASKS'])
 
-flags.DEFINE_string(
-    "input_dev_file", None,
-    "Input dev TF example files (can be a glob or comma separated).")
+# for training we are keeping the seed the same across all runs
+seed = args.seed
 
-flags.DEFINE_string(
-    "noise_file", None,
-    "Input noise files (can be a glob or comma separated).")
+rnd_seed(seed)
+tf.set_random_seed(seed)
 
-flags.DEFINE_string(
-    "noise_dev_file", None,
-    "Input dev noise files (can be a glob or comma separated).")
+files_to_open = sorted(glob(args.files))
+files_chunk = len(files_to_open) // args.num_folds
+our_files = files_to_open[args.fold * files_chunk:(args.fold + 1) * files_chunk]
 
-flags.DEFINE_string(
-    "output_dir", None,
-    "The output directory where the model checkpoints will be written.")
+encoder = get_encoder()
+news_config = GroverConfig.from_json_file(args.model_config_fn)
 
-## Other parameters
-flags.DEFINE_string(
-    "init_checkpoint", None,
-    "Initial checkpoint (usually from a pre-trained model).")
+print('start: {}'.format(encoder.__dict__['begin_article']))
+print('end: {}'.format(encoder.__dict__['end_article']))
 
-flags.DEFINE_integer(
-    "max_seq_length", 1024,
-    "The maximum total input sequence length after BPE tokenization. "
-    "Sequences longer than this will be truncated, and sequences shorter "
-    "than this will be padded. Must match data generation.")
+tf_config = tf.ConfigProto(allow_soft_placement=True)
 
-# flags.DEFINE_integer("train_batch_size", 2, "Total batch size for training.")
-flags.DEFINE_integer("train_batch_size", 8, "Total batch size for training.")
+with tf.Session(config=tf_config, graph=tf.Graph()) as sess:
+    tokens = tf.placeholder(tf.int32, [args.batch_size, args.seq_length])
+    all_probs = []
+    for i in range(args.num_gpus):
+        with tf.device('/gpu:' + str(i)):
+            probs = eval_seq(news_config, tokens, args.correction_factor)
+            all_probs.append(probs)
 
-flags.DEFINE_float("learning_rate", 5e-5, "The initial learning rate for adafactor.")
+    with tf.device('/cpu:0'):
+        merged_probs = tf.concat(all_probs, axis=0)
 
-flags.DEFINE_integer("num_train_steps", 100000, "Number of training steps.")
+    gen_vars = tf.train.list_variables(args.gen_model_ckpt)
+    gen_assignment_map = dict()
+    for v in gen_vars:
+        name, var = v
+        splitted_name = name.split('newslm')
+        tf.logging.info(f'found in gen_checkpoint: {name}')
+        if len(splitted_name) > 1:
+            new_name = ''.join(['gen'] + splitted_name[1:])
+            tf.logging.info(f'new name: {new_name}')
+            gen_assignment_map[new_name] = name
 
-flags.DEFINE_integer("num_warmup_steps", 10000, "Number of warmup steps.")
+    saver = tf.train.Saver(var_list=gen_assignment_map)
+    saver.restore(sess, args.gen_model_ckpt)
 
-flags.DEFINE_integer("save_checkpoints_steps", 1000,
-                     "How often to save the model checkpoint.")
+    dis_saver = tf.train.Saver()
+    dis_saver.restore(sess, args.dis_model_ckpt)
 
-flags.DEFINE_integer("iterations_per_loop", 1000,
-                     "How many steps to make in each estimator call.")
+    # Let's go!
+    for f in tqdm(our_files, disable=None):
+        final_prob_outputs = []
+        with np.load(f) as loaded_numpy:
+            all_seqs = loaded_numpy['cloze']
+            num_batches = all_seqs.shape[0] // args.batch_size
+            for batch in tqdm(range(num_batches), disable=None):
+                this_batch = all_seqs[args.batch_size * batch: args.batch_size * (batch + 1)]
+                probs_out = sess.run([merged_probs],
+                                     feed_dict={tokens: this_batch})
 
-flags.DEFINE_integer("max_eval_steps", 100, "Maximum number of eval steps.")
-
-flags.DEFINE_integer("seed", 42, "Random seed.")
-
-flags.DEFINE_bool("use_tpu", False, "Whether to use TPU or GPU/CPU.")
-
-flags.DEFINE_string(
-    "tpu_name", None,
-    "The Cloud TPU to use for training. This should be either the name "
-    "used when creating the Cloud TPU, or a grpc://ip.address.of.tpu:8470 "
-    "url.")
-
-flags.DEFINE_string(
-    "tpu_zone", None,
-    "[Optional] GCE zone where the Cloud TPU is located in. If not "
-    "specified, we will attempt to automatically detect the GCE project from "
-    "metadata.")
-
-flags.DEFINE_string(
-    "gcp_project", None,
-    "[Optional] Project name for the Cloud TPU-enabled project. If not "
-    "specified, we will attempt to automatically detect the GCE project from "
-    "metadata.")
-
-flags.DEFINE_string("master", None, "[Optional] TensorFlow master URL.")
-
-flags.DEFINE_integer(
-    "num_tpu_cores", 8,
-    "Only used if `use_tpu` is True. Total number of TPU cores to use.")
-
-flags.DEFINE_integer(
-    "eval_delay_secs", 300,
-    "delay evaluation.")
-
-flags.DEFINE_integer(
-    "eval_throttle_secs", 1800,
-    "delay evaluation.")
-
-
-def main(_):
-    from random import seed
-    seed(FLAGS.seed)
-    import os
-    rank = int(os.environ['SLURM_PROCID'])
-    local_rank = int(os.environ['SLURM_LOCALID'])
-    strategy = tf.distribute.experimental.MultiWorkerMirroredStrategy()
-
-    tf.logging.set_verbosity(tf.logging.WARN)
-
-    news_config = GroverConfig.from_json_file(FLAGS.config_file)
-    print(news_config)
-    if rank == 0:
-        tf.gfile.MakeDirs(FLAGS.output_dir)
-
-    input_files = []
-    for input_pattern in FLAGS.input_file.split(","):
-        input_files.extend(tf.gfile.Glob(input_pattern))
-
-    input_dev_files = []
-    for input_pattern in FLAGS.input_dev_file.split(","):
-        input_dev_files.extend(tf.gfile.Glob(input_pattern))
-
-    noise_files = []
-    for noise_pattern in FLAGS.noise_file.split(","):
-        noise_files.extend(tf.gfile.Glob(noise_pattern))
-
-    noise_dev_files = []
-    for noise_pattern in FLAGS.noise_dev_file.split(","):
-        noise_dev_files.extend(tf.gfile.Glob(noise_pattern))
-
-    # tf.logging.info("*** Input Files ***")
-    # for input_file in input_files:
-    #     tf.logging.info("  %s" % input_file)
-
-    run_config = tf.ConfigProto(allow_soft_placement=True, log_device_placement=True)
-
-    model_dir = FLAGS.output_dir
-
-    model_fn = nce_model_fn_builder(news_config, init_checkpoint=FLAGS.init_checkpoint,
-                                    learning_rate=FLAGS.learning_rate,
-                                    num_train_steps=FLAGS.num_train_steps,
-                                    num_warmup_steps=FLAGS.num_warmup_steps,
-                                    )
-
-    # If TPU is not available, this will fall back to normal Estimator on CPU
-    # or GPU.
-    est = tf.estimator.Estimator(
-        model_fn=model_fn,
-        config=tf.estimator.RunConfig(session_config=run_config,
-            train_distribute=strategy,
-            tf_random_seed=FLAGS.seed),
-        model_dir=model_dir,
-        params={'model_dir': model_dir}
-    )
-
-    tf.logging.info("***** Running training *****")
-    tf.logging.info("  Batch size = %d", FLAGS.train_batch_size)
-
-    eval_input_fn = nce_input_fn_builder(k=1, constant_noise=True,
-                                         input_files=input_dev_files,
-                                         noise_files=noise_dev_files,
-                                         seq_length=FLAGS.max_seq_length,
-                                         is_training=False,
-                                         input_batch_size=FLAGS.train_batch_size)
-
-    predicted = est.predict(input_fn=eval_input_fn, predict_keys=None,
-                            start_delay_secs=FLAGS.eval_delay_secs,
-                            )
-
-
-def set_tf_config():
-    import os
-    import json
-    from hostlist import expand_hostlist
-
-    host_list = expand_hostlist(os.environ['SLURM_JOB_NODELIST'])
-
-    start_port = 12345
-
-    rank = int(os.environ['SLURM_PROCID'])
-    tf_config_json = {
-        'cluster': {
-            'worker': []
-        },
-        'task': {'type': 'worker', 'index': rank}
-    }
-    for host_idx, host in enumerate(host_list):
-        tf_config_json['cluster']['worker'].append('{}:{}'.format(host, start_port))
-    print(tf_config_json)
-    os.environ['TF_CONFIG'] = json.dumps(tf_config_json)
-
-
-if __name__ == "__main__":
-    flags.mark_flag_as_required("input_file")
-    flags.mark_flag_as_required("output_dir")
-    set_tf_config()
-    tf.app.run()
+                final_prob_outputs.append(probs_out)
+        final_prob_tensor = np.concatenate(final_prob_outputs, axis=0)
+        output_fname = f'{args.output_path}/{basename(f)}.out.npz'
+        np.savez(output_fname, unnormalized_probs=final_prob_tensor)

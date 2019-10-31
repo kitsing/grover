@@ -676,6 +676,10 @@ class GroverModel(object):
         return tf.reshape(logprobs_flat, [self.batch_size, self.seq_length, -1])
 
     def per_seq_prob(self):
+        """
+        this will only take `clean' tokens i.e. there can be no trailing non-padding symbols after EOS!
+        :return:
+        """
         target_ids_flat = tf.reshape(self.target_ids, [-1])
         label_weights = tf.cast(tf.not_equal(target_ids_flat, self.pad_token_id), dtype=self.logits_flat.dtype)
         one_hot_labels = tf.one_hot(target_ids_flat,
@@ -1023,6 +1027,35 @@ def initialize_from_context(initial_context, ignore_ids, news_config, p_for_topp
         'cache': context_output['new_cache'],
         'probs': context_output['new_probs'][:, None]
     }
+
+
+def eval_seq(news_config: GroverConfig, tokens, correction_factor = 1.):
+    with tf.name_scope('evaluate_sequence'):
+        residual_model = GroverModelResidual(
+            config=news_config,
+            is_training=False,
+            input_ids=tokens,
+            reuse=tf.AUTO_REUSE,
+            noises=None,
+            pad_token_id=news_config.pad_token_id,
+            ignore_noise=True
+        )
+
+        gen_model = GroverModel(
+            config=news_config,
+            is_training=False,
+            input_ids=tokens,
+            reuse=tf.AUTO_REUSE,
+            scope='gen',
+            chop_off_last_token=False,
+            do_cache=True,
+            cache=None,
+        )
+
+        lm_score = gen_model.per_seq_prob()
+        residuals = residual_model.residuals[:, 0]
+        unnormalized_p = residuals + correction_factor * lm_score
+    return unnormalized_p
 
 
 def sample(news_config: GroverConfig, initial_context, eos_token, ignore_ids=None, p_for_topp=0.95,
