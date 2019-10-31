@@ -44,7 +44,7 @@ parser.add_argument('--files', default='./*.npz', type=str)
 parser.add_argument('--seed', default=42, type=int)
 parser.add_argument('--correction-factor', default=1., type=float) # correction factor: 14136832/13628509
 parser.add_argument('--seq-length', default=1025, type=int)
-
+parser.add_argument('--baseline', action='store_true')
 parser.add_argument('--output-path', default='./', type=str)
 parser.add_argument('--num-gpus', default=8, type=int)
 
@@ -102,14 +102,15 @@ with tf.Session(config=tf_config, graph=tf.Graph()) as sess:
         with tf.device('/gpu:' + str(i)):
             tokens = tf.placeholder(tf.int32, [args.batch_size // args.num_gpus, args.seq_length])
             all_tokens.append(tokens)
-            probs = eval_seq(news_config, tokens, args.correction_factor)
+            probs = eval_seq(news_config, tokens, args.correction_factor, baseline=args.baseline)
             all_probs.append(probs)
 
     with tf.device('/cpu:0'):
         merged_probs = tf.concat(all_probs, axis=0)
 
     restore('gen', args.gen_model_ckpt)
-    restore('dis', args.dis_model_ckpt)
+    if not args.baseline:
+        restore('dis', args.dis_model_ckpt)
 
     # Let's go!
     for f in tqdm(our_files, disable=None):

@@ -1029,19 +1029,8 @@ def initialize_from_context(initial_context, ignore_ids, news_config, p_for_topp
     }
 
 
-def eval_seq(news_config: GroverConfig, tokens, correction_factor = 1.):
+def eval_seq(news_config: GroverConfig, tokens, correction_factor = 1., baseline: bool = False):
     with tf.name_scope('evaluate_sequence'):
-        residual_model = GroverModelResidual(
-            config=news_config,
-            is_training=False,
-            input_ids=tokens,
-            reuse=tf.AUTO_REUSE,
-            noises=None,
-            pad_token_id=news_config.pad_token_id,
-            ignore_noise=True,
-            scope='dis'
-        )
-
         gen_model = GroverModel(
             config=news_config,
             is_training=False,
@@ -1052,8 +1041,20 @@ def eval_seq(news_config: GroverConfig, tokens, correction_factor = 1.):
             do_cache=True,
             cache=None,
         )
-
         lm_score = gen_model.per_seq_prob()
+        if baseline:
+            return lm_score
+
+        residual_model = GroverModelResidual(
+            config=news_config,
+            is_training=False,
+            input_ids=tokens,
+            reuse=tf.AUTO_REUSE,
+            noises=None,
+            pad_token_id=news_config.pad_token_id,
+            ignore_noise=True,
+            scope='dis'
+        )
         residuals = residual_model.residuals[:, 0]
         unnormalized_p = residuals + correction_factor * lm_score
     return unnormalized_p

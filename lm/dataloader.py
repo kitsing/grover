@@ -54,7 +54,8 @@ def nce_input_fn_builder(input_files, noise_files, k,
                          is_training,
                          num_cpu_threads=8,
                          evaluate_for_fixed_number_of_steps=True,
-                         input_batch_size=1, strategy=None, constant_noise: bool = False
+                         input_batch_size=1, strategy=None, constant_noise: bool = False,
+                         buffer_noise_files: int = 5,
                          ):
     """Creates an `input_fn` closure to be passed to TPUEstimator."""
     from sample.encoder import get_encoder
@@ -91,25 +92,51 @@ def nce_input_fn_builder(input_files, noise_files, k,
                     remainder = [concat[batch_size:]]
                     remainder_len = remainder[0].shape[0]
                     yield to_yield
-                np_filename = fname_list.pop()
-                tf.logging.info(f'reading {np_filename}',)
-                with np.load(np_filename) as loaded:
-                    s = loaded['tokens']
-                    s = s[(s == end_symbol).argmax(axis=1) > 0] # filter out rows where we cannot find an EOS symbol
-                    np.random.shuffle(s)
-                    s = pad_along_axis(s, seq_length + 1, 1)
-                    truncated_num_of_rows = s.shape[0] - s.shape[0] % batch_size
-                    # discard portions where we cannot make into a batch
-                    remainder.append(s[truncated_num_of_rows:])
-                    remainder_len = remainder_len + s.shape[0] % batch_size
-                    if truncated_num_of_rows == 0:
-                        continue
-                    s = s[:truncated_num_of_rows]
-                    # mask out symbols past EOS
-                    mask = np.arange(s.shape[1])[None, :] <= (s == end_symbol).argmax(axis=1)[:, None]
-                    masked: np.ndarray = s * mask
-                    for b in range(int(s.shape[0] / batch_size)):
-                        yield masked[b*batch_size:(b+1)*batch_size]
+                buffered_files = []
+                while len(fname_list) > 0:
+                    buffered_files.append(fname_list.pop())
+                    tf.logging.info(f'reading {buffered_files[-1]}',)
+                buffered = []
+                for np_filename in buffered_files:
+                    with np.load(np_filename) as loaded:
+                        s = loaded['tokens']
+                        s = s[(s == end_symbol).argmax(axis=1) > 0]  # filter out rows where we cannot find an EOS symbol
+                        s = pad_along_axis(s, seq_length + 1, 1)
+                        # mask out symbols past EOS
+                        mask = np.arange(s.shape[1])[None, :] <= (s == end_symbol).argmax(axis=1)[:, None]
+                        masked: np.ndarray = s * mask
+                        buffered.append(masked)
+                buffered_t = np.concatenate(buffered, axis=0)
+                np.random.shuffle(buffered_t)
+                truncated_num_of_rows = buffered_t.shape[0] - buffered_t.shape[0] % batch_size
+                # discard portions where we cannot make into a batch
+                remainder.append(buffered_t[truncated_num_of_rows:])
+                remainder_len = remainder_len + buffered_t.shape[0] % batch_size
+                if truncated_num_of_rows == 0:
+                    continue
+                buffered_t = buffered_t[:truncated_num_of_rows]
+                for b in range(int(buffered_t.shape[0] / batch_size)):
+                    yield buffered_t[b * batch_size:(b + 1) * batch_size]
+
+                # commenting out old code for now
+                if False:
+                    with np.load(np_filename) as loaded:
+                        s = loaded['tokens']
+                        s = s[(s == end_symbol).argmax(axis=1) > 0] # filter out rows where we cannot find an EOS symbol
+                        np.random.shuffle(s)
+                        s = pad_along_axis(s, seq_length + 1, 1)
+                        truncated_num_of_rows = s.shape[0] - s.shape[0] % batch_size
+                        # discard portions where we cannot make into a batch
+                        remainder.append(s[truncated_num_of_rows:])
+                        remainder_len = remainder_len + s.shape[0] % batch_size
+                        if truncated_num_of_rows == 0:
+                            continue
+                        s = s[:truncated_num_of_rows]
+                        # mask out symbols past EOS
+                        mask = np.arange(s.shape[1])[None, :] <= (s == end_symbol).argmax(axis=1)[:, None]
+                        masked: np.ndarray = s * mask
+                        for b in range(int(s.shape[0] / batch_size)):
+                            yield masked[b*batch_size:(b+1)*batch_size]
 
         return gen
 
