@@ -6,7 +6,7 @@
 # conda activate grover
 export PYTHONPATH=$(pwd)
 
-learning_rate=1e-4
+learning_rate=1.25e-5
 init_checkpoint=""
 max_seq_length=1024
 save_checkpoint_steps=1000

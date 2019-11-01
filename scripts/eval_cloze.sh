@@ -22,10 +22,12 @@ export PYTHONPATH=$(pwd)
 
 model_type="base"
 OUTPUT_DIR=${1} # put your output directory here
+mkdir -p ${OUTPUT_DIR}
+DIS_MODEL_CKPT=${2}
 input_dev_file='/checkpoint/kitsing/grover/cloze/preprocessed_val0[0-5]*.tfrecord.npz'
 
 # Make sure batch size scales.
-let batch_size=128
+let batch_size=160
 
 # NODE_LIST=$( scontrol show hostname ${SLURM_JOB_NODELIST} | sed -z 's/\n/\:8,/g' )
 # NODE_LIST=${NODE_LIST%?}
@@ -38,7 +40,7 @@ set -o noglob
 RUN_STRING="python lm/eval_nce.py \
 --model-config-fn lm/configs/${model_type}.json \
 --gen-model-ckpt /checkpoint/kitsing/grover-models/${model_type}/model.ckpt \
---dis-model-ckpt /checkpoint/kitsing/grover-models/discriminator/model.ckpt-133000 \
+--dis-model-ckpt ${DIS_MODEL_CKPT} \
 --batch-size ${batch_size} \
 --files ${input_dev_file} \
 --output-path ${OUTPUT_DIR} \
