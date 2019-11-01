@@ -64,7 +64,7 @@ def create_optimizer(loss, init_lr, num_train_steps, num_warmup_steps):
     optimizer = AdafactorOptimizer2(
         learning_rate=learning_rate,
         decay_rate=0.01,
-        beta1=0.9,
+        beta1=0.999,
         epsilon1=1e-6,)
     #     # exclude_from_decay=["LayerNorm", "layer_norm", "bias"])
 

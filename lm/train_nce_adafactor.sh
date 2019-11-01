@@ -7,7 +7,6 @@
 export PYTHONPATH=$(pwd)
 
 learning_rate=1.25e-5
-init_checkpoint=""
 max_seq_length=1024
 save_checkpoint_steps=1000
 K=8
@@ -16,6 +15,7 @@ K=8
 # mega, medium, or base
 model_type="base"
 OUTPUT_DIR=${1} # put your output directory here
+init_checkpoint=${2}
 input_file="/checkpoint/kitsing/grover/tfrecords/preprocessed_train*.tfrecord" # put your input files here, it can also be something like "*.tfrecord"
 input_dev_file="/checkpoint/kitsing/grover/tfrecords/preprocessed_valid0[0-5]*.tfrecord" # put your input files here, it can also be something like "*.tfrecord"
 noise_file="/checkpoint/kitsing/grover/unconditional_samples_dev/[0-6]/*.npz"

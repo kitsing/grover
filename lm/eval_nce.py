@@ -115,6 +115,11 @@ with tf.Session(config=tf_config, graph=tf.Graph()) as sess:
     # Let's go!
     for f in tqdm(our_files, disable=None):
         from math import ceil
+        from os.path import exists
+        output_fname = f'{args.output_path}/{basename(f)}.out.npz'
+        if exists(f'{output_fname}'):
+            tf.logging.info(f'{output_fname} already exists. skipping...')
+            continue
         final_prob_outputs = []
         with np.load(f) as loaded_numpy:
             all_seqs = loaded_numpy['cloze']
@@ -135,5 +140,4 @@ with tf.Session(config=tf_config, graph=tf.Graph()) as sess:
 
                 final_prob_outputs.append(probs_out)
         final_prob_tensor = np.concatenate(final_prob_outputs, axis=0)[:all_seqs.shape[0]]
-        output_fname = f'{args.output_path}/{basename(f)}.out.npz'
         np.savez(output_fname, unnormalized_probs=final_prob_tensor)
