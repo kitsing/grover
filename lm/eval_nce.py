@@ -114,18 +114,18 @@ with tf.Session(config=tf_config, graph=tf.Graph()) as sess:
 
     # Let's go!
     for f in tqdm(our_files, disable=None):
+        from math import ceil
         final_prob_outputs = []
         with np.load(f) as loaded_numpy:
             all_seqs = loaded_numpy['cloze']
-            num_batches = all_seqs.shape[0] // args.batch_size
+            num_batches = int(ceil(all_seqs.shape[0] / args.batch_size))
             for batch in tqdm(range(num_batches), disable=None):
                 this_batch: np.ndarray = all_seqs[args.batch_size * batch: args.batch_size * (batch + 1)]
                 feed_dict = {}
-                remainder = this_batch.shape[0] % args.num_gpus
-
                 # pad to fill all GPUs
-                if remainder != 0:
-                    to_append = np.zeros((args.num_gpus - remainder, args.seq_length), dtype=this_batch.dtype)
+                if this_batch.shape[0] < args.batch_size:
+                    to_append = np.zeros((args.batch_size - this_batch.shape[0],
+                                          args.seq_length), dtype=this_batch.dtype)
                     this_batch = np.concatenate((this_batch, to_append), axis=0)
                 splitted_batch = np.split(this_batch, args.num_gpus)
                 for tok, b in zip(all_tokens, splitted_batch):
