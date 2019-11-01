@@ -120,7 +120,7 @@ with tf.Session(config=tf_config, graph=tf.Graph()) as sess:
             for batch in tqdm(range(num_batches), disable=None):
                 this_batch: np.ndarray = all_seqs[args.batch_size * batch: args.batch_size * (batch + 1)]
                 feed_dict = {}
-                remainder = this_batch.shape % args.num_gpus
+                remainder = this_batch.shape[0] % args.num_gpus
 
                 # pad to fill all GPUs
                 if remainder != 0:
