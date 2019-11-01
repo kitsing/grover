@@ -93,7 +93,7 @@ def nce_input_fn_builder(input_files, noise_files, k,
                     remainder_len = remainder[0].shape[0]
                     yield to_yield
                 buffered_files = []
-                while len(fname_list) > 0:
+                while len(fname_list) > 0 and len(buffered_files) < buffer_noise_files:
                     buffered_files.append(fname_list.pop())
                     tf.logging.info(f'reading {buffered_files[-1]}',)
                 buffered = []
