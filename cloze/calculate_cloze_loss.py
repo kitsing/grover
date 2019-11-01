@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 from tqdm import tqdm
 import numpy as np
-from scipy.misc import logsumexp
+from scipy.special import logsumexp
 from os.path import basename
 
 def output_loss(fname, ignored: np.ndarray, prob_path):
