@@ -13,9 +13,9 @@ K=8
 
 # You can customize the training here
 # mega, medium, or base
-model_type="base"
 OUTPUT_DIR=${1} # put your output directory here
 init_checkpoint=${2}
+model_type=${3}
 input_file="/checkpoint/kitsing/grover/tfrecords/preprocessed_train*.tfrecord" # put your input files here, it can also be something like "*.tfrecord"
 input_dev_file="/checkpoint/kitsing/grover/tfrecords/preprocessed_valid0[0-5]*.tfrecord" # put your input files here, it can also be something like "*.tfrecord"
 noise_file="/checkpoint/kitsing/grover/unconditional_samples_dev/[0-6]/*.npz"

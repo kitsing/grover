@@ -19,4 +19,4 @@
 #SBATCH --gres=gpu:8
 #SBATCH --constraint=volta32gb
 
-srun --label lm/train_nce_adafactor.sh ${1} ${2}
+srun --label lm/train_nce_adafactor.sh ${1} ${2} ${3}

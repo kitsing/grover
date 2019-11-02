@@ -39,6 +39,7 @@ class GroverConfig(object):
                  attention_probs_dropout_prob=0.1,
                  max_position_embeddings=512,
                  initializer_range=0.02,
+                 mask_padding: bool = False,
                  scope_prefix='newslm'):
         """Constructs NewsConfig.
 
@@ -74,6 +75,7 @@ class GroverConfig(object):
         self.initializer_range = initializer_range
         self.pad_token_id = 0
         self.scope_prefix=scope_prefix
+        self.mask_padding=mask_padding
 
     @classmethod
     def from_dict(cls, json_object):
@@ -539,8 +541,13 @@ class GroverModelResidual(object):
 
         self.new_kvs = tf.stack(new_kvs, axis=1) if do_cache else None
 
-        self.residuals = tf.reduce_sum(tf.reshape(self.hidden_state,
-                                                  [original_batch_size, self.k+1, self.seq_length, -1]),
+        if self.config.mask_padding:
+            label_weights = tf.cast(tf.not_equal(tf.reshape(self.input_ids, [-1]),
+                                                 self.pad_token_id),
+                                    dtype=self.hidden_state.dtype)[:, None]
+            self.hidden_state = self.hidden_state * label_weights
+        hid_state_restored = tf.reshape(self.hidden_state, [original_batch_size, self.k + 1, self.seq_length, -1])
+        self.residuals = tf.reduce_sum(hid_state_restored,
                                        axis=(2, 3))
 
         # THE OUTPUT BIAS DOES NOT SPARK JOY
