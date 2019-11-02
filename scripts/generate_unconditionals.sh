@@ -19,4 +19,4 @@
 #SBATCH --gres=gpu:8
 #SBATCH --constraint=volta32gb
 
-srun --label sample/unconditional_helper.sh
+srun --label sample/unconditional_helper.sh ${1}
