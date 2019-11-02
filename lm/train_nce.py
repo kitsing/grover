@@ -134,14 +134,6 @@ def main(_):
     for input_pattern in FLAGS.input_dev_file.split(","):
         input_dev_files.extend(tf.gfile.Glob(input_pattern))
 
-    noise_files = []
-    for noise_pattern in FLAGS.noise_file.split(","):
-        noise_files.extend(tf.gfile.Glob(noise_pattern))
-
-    noise_dev_files = []
-    for noise_pattern in FLAGS.noise_dev_file.split(","):
-        noise_dev_files.extend(tf.gfile.Glob(noise_pattern))
-
     # tf.logging.info("*** Input Files ***")
     # for input_file in input_files:
     #     tf.logging.info("  %s" % input_file)
@@ -171,7 +163,7 @@ def main(_):
     tf.logging.info("  Batch size = %d", FLAGS.train_batch_size)
     train_input_fn = nce_input_fn_builder(k=FLAGS.k,
                                           input_files=input_files,
-                                          noise_files=noise_files,
+                                          noise_files=FLAGS.noise_file,
                                           seq_length=FLAGS.max_seq_length,
                                           is_training=True,
                                           input_batch_size=FLAGS.train_batch_size,
@@ -179,7 +171,7 @@ def main(_):
 
     eval_input_fn = nce_input_fn_builder(k=FLAGS.k,
                                          input_files=input_dev_files,
-                                         noise_files=noise_dev_files,
+                                         noise_files=FLAGS.noise_dev_file,
                                          seq_length=FLAGS.max_seq_length,
                                          is_training=False,
                                          input_batch_size=FLAGS.train_batch_size,

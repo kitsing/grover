@@ -18,11 +18,19 @@ init_checkpoint=${2}
 model_type=${3}
 input_file="/checkpoint/kitsing/grover/tfrecords/preprocessed_train*.tfrecord" # put your input files here, it can also be something like "*.tfrecord"
 input_dev_file="/checkpoint/kitsing/grover/tfrecords/preprocessed_valid0[0-5]*.tfrecord" # put your input files here, it can also be something like "*.tfrecord"
-noise_file="/checkpoint/kitsing/grover/unconditional_samples_dev/[0-6]/*.npz"
-noise_dev_file="/checkpoint/kitsing/grover/unconditional_samples_dev/7/*.npz"
+
+noise_file="/checkpoint/kitsing/grover/unconditional_samples_vanilla/[0-6]/*.npz"
+noise_dev_file="/checkpoint/kitsing/grover/unconditional_samples_vanilla/7/*.npz"
+# old noise files below
+#noise_file="/checkpoint/kitsing/grover/unconditional_samples_dev/[0-6]/*.npz"
+#noise_dev_file="/checkpoint/kitsing/grover/unconditional_samples_dev/7/*.npz"
 
 num_tpu_cores=32
 batch_size_per_core=16
+
+if [[ ${init_checkpoint} == "0" ]]; then
+  init_checkpoint=""
+fi
 
 if [[ ${model_type} == "base" ]]; then
     num_tpu_cores=32

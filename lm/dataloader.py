@@ -15,7 +15,7 @@
 
 import collections
 import tensorflow as tf
-
+from typing import Optional
 
 def _decode_record(record, name_to_features):
     """Decodes a record to a TensorFlow example."""
@@ -80,12 +80,18 @@ def nce_input_fn_builder(input_files, noise_files, k,
             return b
 
         def gen():
-            fname_list = list(np_filenames)
+            from glob import glob
+            all_fname_list = set(glob(np_filenames))
+            fname_list = list(all_fname_list)
             from random import shuffle
             shuffle(fname_list)
             remainder = []
             remainder_len = 0
             while len(fname_list) > 0:
+                if len(fname_list) < 3:
+                    new_list = list(set(glob(np_filenames)).difference(all_fname_list))
+                    fname_list.extend(new_list)
+                    all_fname_list.update(new_list)
                 while remainder_len >= batch_size:
                     concat = np.concatenate(remainder, axis=0)
                     to_yield = concat[:batch_size]
