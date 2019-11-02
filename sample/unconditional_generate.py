@@ -113,7 +113,7 @@ with tf.Session(config=tf_config, graph=tf.Graph()) as sess:
         with tf.device('/gpu:'+str(i)):
             tokens, probs = sample(news_config=news_config, initial_context=initial_context,
                                    eos_token=eos_token, ignore_ids=ignore_ids, p_for_topp=p_for_topp,
-                                   do_topk=False, seed=i, max_out_tensor=True)
+                                   do_topk=False, seed=i, max_out_tensor=True, vanilla=True)
             # padded_tokens = pad_to_1025(tokens)
             all_tokens.append(tokens)
             all_probs.append(probs)

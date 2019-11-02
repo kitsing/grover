@@ -350,7 +350,8 @@ def embed(input_ids,
     return layer_norm(embedded_input, name='embed_norm'), embedding_table
 
 
-def _top_p_sample(logits, ignore_ids=None, num_samples=1, p=0.9, seed: Optional[int] = None):
+def _top_p_sample(logits, ignore_ids=None, num_samples=1, p=0.9, seed: Optional[int] = None,
+                  vanilla: bool = False):
     """
     Does top-p sampling. if ignore_ids is on, then we will zero out those logits.
     :param logits: [batch_size, vocab_size] tensor
@@ -368,7 +369,7 @@ def _top_p_sample(logits, ignore_ids=None, num_samples=1, p=0.9, seed: Optional[
         probs = tf.nn.log_softmax(masked_out_logits,
                                   axis=-1)
 
-        if isinstance(p, float) and p > 0.999999:
+        if vanilla or (isinstance(p, float) and p > 0.999999):
             # Don't do top-p sampling in this case
             print("Top-p sampling DISABLED", flush=True)
             return {
@@ -976,8 +977,9 @@ def nce_model_fn_builder(config: GroverConfig, init_checkpoint,
     return model_fn
 
 
-def sample_step(tokens, ignore_ids, news_config, batch_size=1, p_for_topp=0.95, cache=None, do_topk=False,
-                seed: Optional[int] = None):
+def sample_step(tokens, ignore_ids,
+                news_config, batch_size=1, p_for_topp=0.95, cache=None, do_topk=False,
+                seed: Optional[int] = None, vanilla: bool = False):
     """
     Helper function that samples from grover for a single step
     :param tokens: [batch_size, n_ctx_b] tokens that we will predict from
@@ -1008,11 +1010,15 @@ def sample_step(tokens, ignore_ids, news_config, batch_size=1, p_for_topp=0.95, 
     batch_size_times_seq_length, vocab_size = get_shape_list(model.logits_flat, expected_rank=2)
     next_logits = tf.reshape(model.logits_flat, [batch_size, -1, vocab_size])[:, -1]
 
-    if do_topk:
-        sample_info = _top_k_sample(next_logits, num_samples=1, k=tf.cast(p_for_topp, dtype=tf.int32))
-    else:
+    if vanilla:
         sample_info = _top_p_sample(next_logits, ignore_ids=ignore_ids, num_samples=1, p=p_for_topp,
-                                    seed=seed)
+                                    seed=seed, vanilla=True)
+    else:
+        if do_topk:
+            sample_info = _top_k_sample(next_logits, num_samples=1, k=tf.cast(p_for_topp, dtype=tf.int32))
+        else:
+            sample_info = _top_p_sample(next_logits, ignore_ids=ignore_ids, num_samples=1, p=p_for_topp,
+                                        seed=seed, vanilla=False)
 
     new_tokens = tf.squeeze(sample_info['sample'], 1)
     new_probs = tf.squeeze(tf.batch_gather(sample_info['probs'], sample_info['sample']), 1)
@@ -1023,12 +1029,14 @@ def sample_step(tokens, ignore_ids, news_config, batch_size=1, p_for_topp=0.95, 
     }
 
 
-def initialize_from_context(initial_context, ignore_ids, news_config, p_for_topp=0.95, do_topk=False):
+def initialize_from_context(initial_context, ignore_ids, news_config, p_for_topp=0.95, do_topk=False,
+                            vanilla: bool = False):
     """ same signature as sample_step"""
     batch_size, _ = get_shape_list(initial_context, expected_rank=2)
 
     context_output = sample_step(tokens=initial_context, ignore_ids=ignore_ids, news_config=news_config,
-                                 batch_size=batch_size, p_for_topp=p_for_topp, cache=None, do_topk=do_topk)
+                                 batch_size=batch_size, p_for_topp=p_for_topp, cache=None, do_topk=do_topk,
+                                 vanilla=vanilla)
     return {
         'tokens': tf.concat([initial_context, context_output['new_tokens'][:, None]], 1),
         'cache': context_output['new_cache'],
@@ -1068,7 +1076,8 @@ def eval_seq(news_config: GroverConfig, tokens, correction_factor = 1., baseline
 
 
 def sample(news_config: GroverConfig, initial_context, eos_token, ignore_ids=None, p_for_topp=0.95,
-           do_topk=False, seed: Optional[int] = None, max_out_tensor: bool = False):
+           do_topk=False, seed: Optional[int] = None, max_out_tensor: bool = False,
+           vanilla: bool = False):
     """
     V1 version of: sample outputs from a model, and do it all at once
     :param news_config: Configuration used to construct the model
@@ -1086,7 +1095,7 @@ def sample(news_config: GroverConfig, initial_context, eos_token, ignore_ids=Non
         # Initial call to get cache
         context_output = initialize_from_context(initial_context, ignore_ids=ignore_ids, news_config=news_config,
                                                  p_for_topp=p_for_topp,
-                                                 do_topk=do_topk)
+                                                 do_topk=do_topk, vanilla=vanilla)
         ctx = context_output['tokens']
         cache = context_output['cache']
         probs = context_output['probs']
@@ -1096,7 +1105,7 @@ def sample(news_config: GroverConfig, initial_context, eos_token, ignore_ids=Non
             next_outputs = sample_step(ctx[:, -1][:, None], ignore_ids=ignore_ids, news_config=news_config,
                                        batch_size=batch_size, p_for_topp=p_for_topp, cache=cache,
                                        do_topk=do_topk,
-                                       seed=seed)
+                                       seed=seed, vanilla=vanilla)
 
             # Update everything
             new_cache = tf.concat([cache, next_outputs['new_cache']], axis=-2)
