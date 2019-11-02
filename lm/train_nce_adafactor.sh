@@ -21,13 +21,16 @@ input_dev_file="/checkpoint/kitsing/grover/tfrecords/preprocessed_valid0[0-5]*.t
 noise_file="/checkpoint/kitsing/grover/unconditional_samples_dev/[0-6]/*.npz"
 noise_dev_file="/checkpoint/kitsing/grover/unconditional_samples_dev/7/*.npz"
 
-if [ ${model_type} == "base" ]; then
+num_tpu_cores=32
+batch_size_per_core=16
+
+if [[ ${model_type} == "base" ]]; then
     num_tpu_cores=32
     batch_size_per_core=16
-elif [ ${model_type} == "medium" ]; then
+elif [[ ${model_type} == "medium" ]]; then
     num_tpu_cores=128
     batch_size_per_core=4
-elif [ ${model_type} == "mega" ]; then
+elif [[ ${model_type} == "mega" ]]; then
     num_tpu_cores=256
     batch_size_per_core=2
 fi

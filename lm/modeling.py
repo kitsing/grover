@@ -371,7 +371,7 @@ def _top_p_sample(logits, ignore_ids=None, num_samples=1, p=0.9, seed: Optional[
 
         if vanilla or (isinstance(p, float) and p > 0.999999):
             # Don't do top-p sampling in this case
-            print("Top-p sampling DISABLED", flush=True)
+            # print("Top-p sampling DISABLED", flush=True)
             return {
                 'probs': probs,
                 'sample': tf.random.categorical(
