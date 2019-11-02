@@ -12,21 +12,21 @@
 ## partition name
 #SBATCH --partition=learnfair
 ## number of nodes
-#SBATCH --ntasks-per-node=64
-#SBATCH --ntasks=1024
+#SBATCH --ntasks-per-node=10
+#SBATCH --ntasks=100
 #SBATCH --time=2880
 #SBATCH --signal=USR1@180 #Signal is sent to batch script itself
 ## number of tasks per node
 ## notify 10 minutes before job is killed so we can requeue
 
-CLOZE_PATH=/checkpoint/kitsing/grover/cloze
+CLOZE_PATH=/checkpoint/kitsing/grover/cloze-train
 ON_CLUSTER=1
 
 mkdir -p "${CLOZE_PATH}"
 export PYTHONPATH=$(pwd)
 RUN_STRING="bash cloze/generate_cloze_helper.sh \
             ${CLOZE_PATH}/ \
-            42 val"
+            42 train"
 
 echo "${RUN_STRING}"
 if [[ ${ON_CLUSTER} -eq 1 ]]; then
