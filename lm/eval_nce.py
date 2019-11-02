@@ -74,23 +74,27 @@ tf_config = tf.ConfigProto(allow_soft_placement=True)
 
 
 def restore(scope, checkpoint):
-    gen_vars = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope=scope)
-    gen_checkpoint_vars = tf.train.list_variables(checkpoint)
-    gen_checkpoint_names = [_[0] for _ in gen_checkpoint_vars]
-    gen_assignment_map = dict()
-    for var in gen_vars:
+    vars = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope=scope)
+    checkpoint_vars = tf.train.list_variables(checkpoint)
+    checkpoint_names = [_[0] for _ in checkpoint_vars]
+    assignment_map = dict()
+    unused_vars_in_checkpoint = set(checkpoint_names)
+    for var in vars:
         name = var.name
         assert name.endswith(':0')
         name = name[:-2]
         splitted_name = name.split(scope)
         if len(splitted_name) > 1:
             new_name = ''.join(['newslm'] + splitted_name[1:])
-            if new_name in gen_checkpoint_names:
-                gen_assignment_map[new_name] = var
+            if new_name in unused_vars_in_checkpoint:
+                assignment_map[new_name] = var
+                tf.logging.info(f'key found: {new_name} -> {name}')
+                unused_vars_in_checkpoint.remove(new_name)
             else:
                 tf.logging.warn(f'key not found: {new_name}')
+    tf.logging.warn(f'unused variables in checkpoint: {unused_vars_in_checkpoint}')
     # print(gen_assignment_map)
-    saver = tf.train.Saver(var_list=gen_assignment_map)
+    saver = tf.train.Saver(var_list=assignment_map)
     saver.restore(sess, checkpoint)
 
 
