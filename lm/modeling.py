@@ -1072,7 +1072,7 @@ def eval_seq(news_config: GroverConfig, tokens, correction_factor = 1., baseline
         )
         residuals = residual_model.residuals[:, 0]
         unnormalized_p = residuals + correction_factor * lm_score
-    return unnormalized_p
+        return unnormalized_p
 
 
 def sample(news_config: GroverConfig, initial_context, eos_token, ignore_ids=None, p_for_topp=0.95,
