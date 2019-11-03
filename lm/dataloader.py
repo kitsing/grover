@@ -62,10 +62,9 @@ def nce_input_fn_builder(input_files, noise_files, k,
     encoder = get_encoder()
     end_symbol = encoder.__dict__['end_article']
 
-    def build_gen(np_filenames, batch_size, input_context):
+    def build_gen(np_filenames, batch_size):
         import numpy as np
-        from random import Random
-        r = Random(input_context.input_pipeline_id)
+        from random import shuffle
 
         def pad_along_axis(array: np.ndarray, target_length, axis=0):
             pad_size = target_length - array.shape[axis]
@@ -86,7 +85,7 @@ def nce_input_fn_builder(input_files, noise_files, k,
             all_fname_list = set(glob(np_filenames))
             fname_list = list(all_fname_list)
 
-            r.shuffle(fname_list)
+            shuffle(fname_list)
             remainder = []
             remainder_len = 0
             while len(fname_list) > 0:
@@ -147,9 +146,9 @@ def nce_input_fn_builder(input_files, noise_files, k,
                             yield masked[b*batch_size:(b+1)*batch_size]
 
         return gen
-
+    built_gen = build_gen(noise_files, k)
     def input_fn(params, input_context: tf.distribute.InputContext = None):
-        built_gen = build_gen(noise_files, k, input_context)
+
 
         """The actual input function."""
         # batch_size = params["batch_size"]
@@ -178,6 +177,8 @@ def nce_input_fn_builder(input_files, noise_files, k,
             nd = tf.data.Dataset.from_generator(built_gen,
                                                 tf.int64,
                                                 output_shapes=tf.TensorShape([k, seq_length+1]))
+            nd = nd.shard(input_context.num_input_pipelines,
+                          input_context.input_pipeline_id)
             nd = nd.repeat()
 
             # zip with the noise dataset
