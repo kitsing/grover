@@ -41,6 +41,7 @@ class GroverConfig(object):
                  initializer_range=0.02,
                  mask_padding: bool = False,
                  word_dropout_prob: float = 0.1,
+                 final_projection_layer: bool = False,
                  scope_prefix='newslm'):
         """Constructs NewsConfig.
 
@@ -78,6 +79,7 @@ class GroverConfig(object):
         self.scope_prefix=scope_prefix
         self.mask_padding = mask_padding
         self.word_dropout_prob = word_dropout_prob
+        self.final_projection_layer = final_projection_layer
 
     @classmethod
     def from_dict(cls, json_object):
@@ -559,11 +561,23 @@ class GroverModelResidual(object):
         if self.config.mask_padding:
             label_weights = tf.cast(tf.not_equal(tf.reshape(self.input_ids, [-1]),
                                                  self.pad_token_id),
-                                    dtype=self.hidden_state.dtype)[:, None]
-            self.hidden_state = self.hidden_state * label_weights
-        hid_state_restored = tf.reshape(self.hidden_state, [original_batch_size, self.k + 1, self.seq_length, -1])
-        self.residuals = tf.reduce_sum(hid_state_restored,
-                                       axis=(2, 3))
+                                    dtype=self.hidden_state.dtype)
+        else:
+            label_weights = tf.reshape(tf.ones_like(self.input_ids, dtype=self.hidden_state.dtype), (-1,))
+
+        if self.config.final_projection_layer:
+            self.residuals = tf.layers.dense(tf.layers.dropout(self.hidden_state, rate=self.config.hidden_dropout_prob,
+                                                               training=is_training),
+                                             1, name='discriminator_final_layer', use_bias=False)
+            self.residuals = tf.reshape(tf.reshape(self.residuals, (-1,)) * label_weights,
+                                        (original_batch_size, self.k+1, self.seq_length)
+                                        )
+            self.residuals = tf.reduce_sum(self.residuals, axis=2)
+        else:
+            self.hidden_state = self.hidden_state * label_weights[:, None]
+            hid_state_restored = tf.reshape(self.hidden_state, [original_batch_size, self.k + 1, self.seq_length, -1])
+            self.residuals = tf.reduce_sum(hid_state_restored,
+                                           axis=(2, 3))
 
         # THE OUTPUT BIAS DOES NOT SPARK JOY
         # output_bias = tf.get_variable('output_bias', shape=[config.vocab_size], initializer=tf.zeros_initializer())
