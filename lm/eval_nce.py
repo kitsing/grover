@@ -142,6 +142,6 @@ with tf.Session(config=tf_config, graph=tf.Graph()) as sess:
                 probs_out = sess.run([merged_probs],
                                      feed_dict=feed_dict)
 
-                final_prob_outputs.append(probs_out.reshape((-1,)))
-        final_prob_tensor = np.concatenate(final_prob_outputs, axis=0)[:all_seqs.shape[0]]
+                final_prob_outputs.append(probs_out)
+        final_prob_tensor = np.concatenate(final_prob_outputs, axis=0).reshape((-1,))[:all_seqs.shape[0]]
         np.savez(output_fname, unnormalized_probs=final_prob_tensor)

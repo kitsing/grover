@@ -5,7 +5,10 @@ from scipy.special import logsumexp
 from os.path import basename
 
 def output_loss(fname, ignored: np.ndarray, prob_path):
+    from os.path import exists
     prob_file = f'{prob_path}/{basename(fname)}.out.npz'
+    if exists(prob_file+'.answer'):
+        return
     with np.load(fname) as fh, np.load(prob_file) as prob_fh:
         prob_outputs = prob_fh['unnormalized_probs'].reshape((-1,))[:ignored.shape[0]]
         # assert prob_outputs.shape == ignored.shape, '{} {} {}'.format(prob_outputs.shape, ignored.shape, fh['cloze'].shape)
