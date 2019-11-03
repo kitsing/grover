@@ -568,7 +568,8 @@ class GroverModelResidual(object):
         if self.config.final_projection_layer:
             self.residuals = tf.layers.dense(tf.layers.dropout(self.hidden_state, rate=self.config.hidden_dropout_prob,
                                                                training=is_training),
-                                             1, name='discriminator_final_layer', use_bias=False)
+                                             1, name='discriminator_final_layer', use_bias=False,
+                                             reuse=tf.AUTO_REUSE)
             self.residuals = tf.reshape(tf.reshape(self.residuals, (-1,)) * label_weights,
                                         (original_batch_size, self.k+1, self.seq_length)
                                         )
