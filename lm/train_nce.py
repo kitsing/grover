@@ -111,8 +111,11 @@ flags.DEFINE_integer(
 
 
 def main(_):
-    from random import seed
-    seed(FLAGS.seed)
+    from random import seed as rnd_seed
+    from os import environ
+    if 'SLURM_PROCID' in environ:
+        seed = FLAGS.seed + int(environ['SLURM_PROCID'])
+    rnd_seed(seed)
     import os
     rank = int(os.environ['SLURM_PROCID'])
     local_rank = int(os.environ['SLURM_LOCALID'])
