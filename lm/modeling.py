@@ -40,6 +40,7 @@ class GroverConfig(object):
                  max_position_embeddings=512,
                  initializer_range=0.02,
                  mask_padding: bool = False,
+                 word_dropout_prob: float = 0.1,
                  scope_prefix='newslm'):
         """Constructs NewsConfig.
 
@@ -75,7 +76,8 @@ class GroverConfig(object):
         self.initializer_range = initializer_range
         self.pad_token_id = 0
         self.scope_prefix=scope_prefix
-        self.mask_padding=mask_padding
+        self.mask_padding = mask_padding
+        self.word_dropout_prob = word_dropout_prob
 
     @classmethod
     def from_dict(cls, json_object):
@@ -484,6 +486,18 @@ class GroverModelResidual(object):
             concatenated = input_ids[:, None, 1:]
         self.input_ids = tf.reshape(concatenated, (-1, concatenated.shape[2]))
         self.batch_size, self.seq_length = get_shape_list(self.input_ids, 2)
+
+        if is_training and self.config.word_dropout_prob > 0.:
+            from tensorflow.distributions import Bernoulli
+            b = Bernoulli(probs=(1 - self.config.word_dropout_prob), dtype=tf.bool)
+            word_dropout_mask = b.sample(sample_shape=(self.batch_size, self.seq_length))
+            self.input_ids = tf.where(word_dropout_mask,
+                                      self.input_ids,
+                                      tf.fill(
+                                          (self.batch_size, self.seq_length),
+                                          self.pad_token_id)
+                                      )
+
         assert config.max_position_embeddings >= self.seq_length
         if cache is None:
             caches = [None] * config.num_hidden_layers
