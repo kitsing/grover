@@ -20,10 +20,10 @@
 #SBATCH --constraint=volta32gb
 export PYTHONPATH=$(pwd)
 
-model_type="base"
 OUTPUT_DIR=${1} # put your output directory here
 mkdir -p ${OUTPUT_DIR}
 DIS_MODEL_CKPT=${2}
+model_type=${3}
 #input_dev_file='/checkpoint/kitsing/grover/cloze/preprocessed_val0[0-5]*.tfrecord.npz'
 input_dev_file='/checkpoint/kitsing/grover/cloze/preprocessed_val00[0-9]*.tfrecord.npz'
 
