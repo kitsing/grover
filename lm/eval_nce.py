@@ -83,6 +83,15 @@ def restore(scope, checkpoint):
         name = var.name
         assert name.endswith(':0')
         name = name[:-2]
+
+        # hack
+        if name.startswith('discriminator_final_layer'):
+            if name in unused_vars_in_checkpoint:
+                assignment_map[name] = var
+            else:
+                tf.logging.warn(f'key not found: {name}')
+            continue
+
         splitted_name = name.split(scope)
         if len(splitted_name) > 1:
             new_name = ''.join(['newslm'] + splitted_name[1:])
@@ -92,6 +101,9 @@ def restore(scope, checkpoint):
                 unused_vars_in_checkpoint.remove(new_name)
             else:
                 tf.logging.warn(f'key not found: {new_name}')
+        else:
+            tf.logging.warn(f'key {name} does not start with {scope}')
+
     tf.logging.warn(f'unused variables in checkpoint: {unused_vars_in_checkpoint}')
     # print(gen_assignment_map)
     saver = tf.train.Saver(var_list=assignment_map)
