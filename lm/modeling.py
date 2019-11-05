@@ -508,7 +508,7 @@ class GroverModelResidual(object):
                                                  self.pad_token_id),
                                     dtype=tf.float32)
         else:
-            label_weights = tf.reshape(tf.ones_like(self.input_ids, dtype=self.float32), (-1,))
+            label_weights = tf.reshape(tf.ones_like(self.input_ids, dtype=tf.float32), (-1,))
 
         assert config.max_position_embeddings >= self.seq_length
         if cache is None:
