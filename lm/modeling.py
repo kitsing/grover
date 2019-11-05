@@ -582,7 +582,7 @@ class GroverModelResidual(object):
                     full_mask = tf.ones((self.seq_length, self.seq_length + self.cache_length), dtype=embeddings.dtype)
 
                     for additional_layer_idx in range(self.config.additional_transformer_layers):
-                        with tf.variable_scope('additional_layer{:02d}'.format(layer_idx)):
+                        with tf.variable_scope('additional_layer{:02d}'.format(additional_layer_idx)):
                             # [batch_size * seq_length, hidden_size]
                             attention_output, new_kv = attention_layer(
                                 hidden_state,
@@ -607,7 +607,7 @@ class GroverModelResidual(object):
                                                                      rate=self.config.hidden_dropout_prob,
                                                                      training=is_training),
                                                    self.config.hidden_size, name='additional_final_layer',
-                                                   reuse=tf.AUTO_REUSE)
+                                                   )
             self.hidden_state = hidden_state
         self.new_kvs = tf.stack(new_kvs, axis=1) if do_cache else None
         if self.config.mask_padding:
@@ -621,7 +621,7 @@ class GroverModelResidual(object):
             self.residuals = tf.layers.dense(tf.layers.dropout(self.hidden_state, rate=self.config.hidden_dropout_prob,
                                                                training=is_training),
                                              1, name='discriminator_final_layer', use_bias=False,
-                                             reuse=tf.AUTO_REUSE)
+                                             reuse=reuse)
             self.residuals = tf.reshape(tf.reshape(self.residuals, (-1,)) * label_weights,
                                         (original_batch_size, self.k+1, self.seq_length)
                                         )

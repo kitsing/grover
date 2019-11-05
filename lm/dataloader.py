@@ -124,27 +124,6 @@ def nce_input_fn_builder(input_files, noise_files, k,
                 buffered_t = buffered_t[:truncated_num_of_rows]
                 for b in range(int(buffered_t.shape[0] / batch_size)):
                     yield buffered_t[b * batch_size:(b + 1) * batch_size]
-
-                # commenting out old code for now
-                if False:
-                    with np.load(np_filename) as loaded:
-                        s = loaded['tokens']
-                        s = s[(s == end_symbol).argmax(axis=1) > 0] # filter out rows where we cannot find an EOS symbol
-                        np.random.shuffle(s)
-                        s = pad_along_axis(s, seq_length + 1, 1)
-                        truncated_num_of_rows = s.shape[0] - s.shape[0] % batch_size
-                        # discard portions where we cannot make into a batch
-                        remainder.append(s[truncated_num_of_rows:])
-                        remainder_len = remainder_len + s.shape[0] % batch_size
-                        if truncated_num_of_rows == 0:
-                            continue
-                        s = s[:truncated_num_of_rows]
-                        # mask out symbols past EOS
-                        mask = np.arange(s.shape[1])[None, :] <= (s == end_symbol).argmax(axis=1)[:, None]
-                        masked: np.ndarray = s * mask
-                        for b in range(int(s.shape[0] / batch_size)):
-                            yield masked[b*batch_size:(b+1)*batch_size]
-
         return gen
     built_gen = build_gen(noise_files, k)
     def input_fn(params, input_context: tf.distribute.InputContext = None):
