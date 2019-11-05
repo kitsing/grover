@@ -156,7 +156,8 @@ def get_attention_mask(nd, ns, *, dtype):
 
 
 def get_assignment_map_from_checkpoint(tvars, init_checkpoint, prefix: Optional[str] = None,
-                                       prefix_in_checkpoint: str='newslm'):
+                                       prefix_in_checkpoint: str='newslm',
+                                       only_initialize_prefix: Optional[str] = None):
     """Compute the union of the current variables and checkpoint variables."""
     assignment_map = {}
     initialized_variable_names = {}
@@ -164,9 +165,13 @@ def get_assignment_map_from_checkpoint(tvars, init_checkpoint, prefix: Optional[
     name_to_variable = collections.OrderedDict()
     for var in tvars:
         name = var.name
+        if only_initialize_prefix is not None and ('Ada' in name or
+                                                   'LayerNorm' in name or
+                                                   (not name.startswith(only_initialize_prefix))):
+            continue
         if prefix is not None and name.startswith(prefix):
             splitted_name = name.split(prefix)[1:]
-            name = ''.join([prefix_in_checkpoint], splitted_name)
+            name = ''.join([prefix_in_checkpoint] + splitted_name)
         m = re.match("^(.*):\\d+$", name)
         if m is not None:
             name = m.group(1)

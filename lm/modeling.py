@@ -980,7 +980,7 @@ def nce_model_fn_builder(config: GroverConfig, init_checkpoint,
         if reuse_gen:
             assert gen_checkpoint is not None
             (assignment_map, initialized_variable_names
-             ) = get_assignment_map_from_checkpoint(tvars, gen_checkpoint)
+             ) = get_assignment_map_from_checkpoint(tvars, gen_checkpoint, only_initialize_prefix='newslm')
             tf.train.init_from_checkpoint(gen_checkpoint, assignment_map)
 
         initialized_variable_names = {}
