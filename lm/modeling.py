@@ -486,10 +486,10 @@ class GroverModelResidual(object):
         original_batch_size = input_ids.shape[0]
         if not ignore_noise:
             self.k = noises.shape[1]
-            concatenated = tf.concat((input_ids[:, None, :], noises), axis=1)[:, :, 1:]
+            concatenated = tf.concat((input_ids[:, None, :], noises), axis=1)[:, :, :-1]
         else:
             self.k = 0
-            concatenated = input_ids[:, None, 1:]
+            concatenated = input_ids[:, None, :-1]
         self.input_ids = tf.reshape(concatenated, (-1, concatenated.shape[2]))
         self.batch_size, self.seq_length = get_shape_list(self.input_ids, 2)
 
@@ -503,6 +503,12 @@ class GroverModelResidual(object):
                                           (self.batch_size, self.seq_length),
                                           self.pad_token_id)
                                       )
+        if self.config.mask_padding:
+            label_weights = tf.cast(tf.not_equal(tf.reshape(self.input_ids, [-1]),
+                                                 self.pad_token_id),
+                                    dtype=self.hidden_state.dtype)
+        else:
+            label_weights = tf.reshape(tf.ones_like(self.input_ids, dtype=self.hidden_state.dtype), (-1,))
 
         assert config.max_position_embeddings >= self.seq_length
         if cache is None:
@@ -564,7 +570,7 @@ class GroverModelResidual(object):
                                                       hidden_dropout_prob=self.config.hidden_dropout_prob)
             if self.config.reuse_gen:
                 # have to stop gradient here as we don't want to finetune the generator (or do we?)
-                hidden_state = tf.stop_gradient(hidden_state)
+                hidden_state = tf.stop_gradient(hidden_state) * label_weights[:, None]
                 # start some additional layers
                 if self.config.additional_transformer_layers > 0:
                     with tf.variable_scope("additional_embeddings"):
@@ -610,12 +616,6 @@ class GroverModelResidual(object):
                                                    )
             self.hidden_state = hidden_state
         self.new_kvs = tf.stack(new_kvs, axis=1) if do_cache else None
-        if self.config.mask_padding:
-            label_weights = tf.cast(tf.not_equal(tf.reshape(self.input_ids, [-1]),
-                                                 self.pad_token_id),
-                                    dtype=self.hidden_state.dtype)
-        else:
-            label_weights = tf.reshape(tf.ones_like(self.input_ids, dtype=self.hidden_state.dtype), (-1,))
 
         if self.config.final_projection_layer:
             self.residuals = tf.layers.dense(tf.layers.dropout(self.hidden_state, rate=self.config.hidden_dropout_prob,
