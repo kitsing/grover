@@ -165,9 +165,9 @@ def get_assignment_map_from_checkpoint(tvars, init_checkpoint, prefix: Optional[
     name_to_variable = collections.OrderedDict()
     for var in tvars:
         name = var.name
-        if only_initialize_prefix is not None and ('Ada' in name or
-                                                   'LayerNorm' in name or
-                                                   (not name.startswith(only_initialize_prefix))):
+        if only_initialize_prefix is not None \
+                and ('AdaFactor' in name or
+                     (not name.startswith(only_initialize_prefix))):
             continue
         if prefix is not None and name.startswith(prefix):
             splitted_name = name.split(prefix)[1:]
