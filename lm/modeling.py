@@ -42,6 +42,8 @@ class GroverConfig(object):
                  mask_padding: bool = False,
                  word_dropout_prob: float = 0.1,
                  final_projection_layer: bool = False,
+                 reuse_gen: bool = False,
+                 additional_transformer_layers: int = 4,
                  scope_prefix='newslm'):
         """Constructs NewsConfig.
 
@@ -80,6 +82,8 @@ class GroverConfig(object):
         self.mask_padding = mask_padding
         self.word_dropout_prob = word_dropout_prob
         self.final_projection_layer = final_projection_layer
+        self.reuse_gen = reuse_gen
+        self.additional_transformer_layers = additional_transformer_layers
 
     @classmethod
     def from_dict(cls, json_object):
@@ -523,8 +527,12 @@ class GroverModelResidual(object):
                                                          max_position_embeddings=config.max_position_embeddings,
                                                          use_one_hot_embeddings=True)
 
-            # we don't really need masking
-            mask = tf.ones((self.seq_length, self.seq_length + self.cache_length), dtype=embeddings.dtype)
+            if self.config.reuse_gen:
+                # reusing the original model for embeddings. to ensure correctness we make use of the original masks
+                mask = get_attention_mask(self.seq_length, self.seq_length + self.cache_length, dtype=embeddings.dtype)
+            else:
+                # we don't really need masking
+                mask = tf.ones((self.seq_length, self.seq_length + self.cache_length), dtype=embeddings.dtype)
 
             # We keep the representation as a 2D tensor to avoid re-shaping it back and
             # forth from a 3D tensor to a 2D tensor. Re-shapes are normally free on
@@ -554,10 +562,54 @@ class GroverModelResidual(object):
                     hidden_state = residual_mlp_layer(hidden_state + attention_output,
                                                       intermediate_size=config.intermediate_size,
                                                       hidden_dropout_prob=self.config.hidden_dropout_prob)
+            if self.config.reuse_gen:
+                # have to stop gradient here as we don't want to finetune the generator (or do we?)
+                hidden_state = tf.stop_gradient(hidden_state)
+                # start some additional layers
+                if self.config.additional_transformer_layers > 0:
+                    with tf.variable_scope("additional_embeddings"):
+                        add_embeddings, \
+                        self.add_embedding_table = embed(self.input_ids, config.vocab_size,
+                                                         config.hidden_size,
+                                                         position_offset=self.cache_length,
+                                                         initializer_range=config.initializer_range,
+                                                         max_position_embeddings=config.max_position_embeddings,
+                                                         use_one_hot_embeddings=True)
+                    emb_shape = [self.batch_size * self.seq_length, self.config.hidden_size]
+                    additional_emb = tf.reshape(add_embeddings, emb_shape)
+                    hidden_state = tf.concat((hidden_state, additional_emb), axis=1)
+                    # we are no longer subject to the left-context limitation so we have a full mask here
+                    full_mask = tf.ones((self.seq_length, self.seq_length + self.cache_length), dtype=embeddings.dtype)
+
+                    for additional_layer_idx in range(self.config.additional_transformer_layers):
+                        with tf.variable_scope('additional_layer{:02d}'.format(layer_idx)):
+                            # [batch_size * seq_length, hidden_size]
+                            attention_output, new_kv = attention_layer(
+                                hidden_state,
+                                full_mask,
+                                batch_size=self.batch_size,
+                                seq_length=self.seq_length,
+                                size_per_head=config.hidden_size * 2 // config.num_attention_heads,
+                                num_attention_heads=config.num_attention_heads,
+                                initializer_range=config.initializer_range,
+                                hidden_dropout_prob=self.config.hidden_dropout_prob,
+                                attention_probs_dropout_prob=self.config.attention_probs_dropout_prob,
+                                do_cache=do_cache,
+                                cache=layer_cache,
+                            )
+                            new_kvs.append(new_kv)
+
+                            # [batch_size * seq_length, hidden_size]
+                            hidden_state = residual_mlp_layer(hidden_state + attention_output,
+                                                              intermediate_size=config.intermediate_size,
+                                                              hidden_dropout_prob=self.config.hidden_dropout_prob)
+                    hidden_state = tf.layers.dense(tf.layers.dropout(hidden_state,
+                                                                     rate=self.config.hidden_dropout_prob,
+                                                                     training=is_training),
+                                                   self.config.hidden_size, name='additional_final_layer',
+                                                   reuse=tf.AUTO_REUSE)
             self.hidden_state = hidden_state
-
         self.new_kvs = tf.stack(new_kvs, axis=1) if do_cache else None
-
         if self.config.mask_padding:
             label_weights = tf.cast(tf.not_equal(tf.reshape(self.input_ids, [-1]),
                                                  self.pad_token_id),
@@ -891,7 +943,8 @@ def nce_model_fn_builder(config: GroverConfig, init_checkpoint,
                          learning_rate,
                          num_train_steps, num_warmup_steps,
                          gen_checkpoint: Optional[str] = None,
-                         correction_factor: float = 1.):
+                         correction_factor: float = 1.,
+                         ):
 
     def model_fn(features, labels, mode, params):  # pylint: disable=unused-argument
         tf.logging.info("*** Features ***")
@@ -903,13 +956,16 @@ def nce_model_fn_builder(config: GroverConfig, init_checkpoint,
 
         is_training = (mode == tf.estimator.ModeKeys.TRAIN)
 
+        gen_config = copy.deepcopy(config)
+        reuse_gen = config.reuse_gen
+        gen_model: Optional[GroverModel] = None
         residual_model = GroverModelResidual(
             config=config,
             is_training=is_training,
             input_ids=input_ids,
             noises=noises,
             pad_token_id=config.pad_token_id,
-            ignore_noise=(mode==tf.estimator.ModeKeys.PREDICT)
+            ignore_noise=(mode == tf.estimator.ModeKeys.PREDICT)
         )
 
         total_loss = residual_model.total_loss()
@@ -919,39 +975,19 @@ def nce_model_fn_builder(config: GroverConfig, init_checkpoint,
             tvars = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES)
         else:
             train_op = None
-            train_metrics = {}
             tvars = tf.trainable_variables()
+
+        if reuse_gen:
+            assert gen_checkpoint is not None
+            (assignment_map, initialized_variable_names
+             ) = get_assignment_map_from_checkpoint(tvars, gen_checkpoint)
+            tf.train.init_from_checkpoint(gen_checkpoint, assignment_map)
 
         initialized_variable_names = {}
         if init_checkpoint:
             (assignment_map, initialized_variable_names
              ) = get_assignment_map_from_checkpoint(tvars, init_checkpoint)
             tf.train.init_from_checkpoint(init_checkpoint, assignment_map)
-
-        gen_config = copy.deepcopy(config)
-        gen_config.scope_prefix = 'gen_newslm'
-
-        gen_model: Optional[GroverModel] = None
-        if gen_checkpoint is not None:
-            gen_model = GroverModel(
-                config=gen_config,
-                is_training=False,
-                input_ids=input_ids,
-                pad_token_id=config.pad_token_id,
-                chop_off_last_token=True,
-            )
-
-            gen_vars = tf.train.list_variables(gen_checkpoint)
-            gen_assignment_map = dict()
-            for v in gen_vars:
-                name, var = v
-                splitted_name = name.split('newslm')
-                tf.logging.info(f'found in gen_checkpoint: {name}')
-                if len(splitted_name) > 1:
-                    new_name = ''.join([gen_config.scope_prefix] + splitted_name[1:])
-                    tf.logging.info(f'new name: {new_name}')
-                    gen_assignment_map[new_name] = name
-            tf.train.init_from_checkpoint(gen_checkpoint, gen_assignment_map)
 
         if mode == tf.estimator.ModeKeys.PREDICT:
             assert gen_model is not None

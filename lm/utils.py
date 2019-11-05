@@ -20,7 +20,7 @@ import six
 import tensorflow as tf
 import numpy as np
 from tensorflow.python.lib.io import file_io
-
+from typing import Optional
 
 def _save_np(absolute_fn, array):
     if absolute_fn.startswith('gs://'):
@@ -155,7 +155,8 @@ def get_attention_mask(nd, ns, *, dtype):
     return tf.cast(m, dtype)
 
 
-def get_assignment_map_from_checkpoint(tvars, init_checkpoint):
+def get_assignment_map_from_checkpoint(tvars, init_checkpoint, prefix: Optional[str] = None,
+                                       prefix_in_checkpoint: str='newslm'):
     """Compute the union of the current variables and checkpoint variables."""
     assignment_map = {}
     initialized_variable_names = {}
@@ -163,6 +164,9 @@ def get_assignment_map_from_checkpoint(tvars, init_checkpoint):
     name_to_variable = collections.OrderedDict()
     for var in tvars:
         name = var.name
+        if prefix is not None and name.startswith(prefix):
+            splitted_name = name.split(prefix)[1:]
+            name = ''.join([prefix_in_checkpoint], splitted_name)
         m = re.match("^(.*):\\d+$", name)
         if m is not None:
             name = m.group(1)

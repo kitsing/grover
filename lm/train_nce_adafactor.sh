@@ -16,6 +16,7 @@ K=8
 OUTPUT_DIR=${1} # put your output directory here
 init_checkpoint=${2}
 model_type=${3}
+gen_checkpoint=${4}
 input_file="/checkpoint/kitsing/grover/tfrecords/preprocessed_train*.tfrecord" # put your input files here, it can also be something like "*.tfrecord"
 input_dev_file="/checkpoint/kitsing/grover/tfrecords/preprocessed_valid0[0-5]*.tfrecord" # put your input files here, it can also be something like "*.tfrecord"
 
@@ -30,6 +31,10 @@ batch_size_per_core=16
 
 if [[ ${init_checkpoint} == "0" ]]; then
   init_checkpoint=""
+fi
+
+if [[ ${gen_checkpoint} == "0" ]]; then
+  gen_checkpoint=""
 fi
 
 if [[ ${model_type} == "base" ]]; then
@@ -74,4 +79,5 @@ python lm/train_nce.py \
     --use_tpu=False \
     --num_tpu_cores=$num_tpu_cores \
     --init_checkpoint=${init_checkpoint} \
+    --gen_checkpoint=${gen_checkpoint} \
     --k=${K}

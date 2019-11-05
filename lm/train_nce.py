@@ -54,6 +54,10 @@ flags.DEFINE_string(
     "init_checkpoint", None,
     "Initial checkpoint (usually from a pre-trained model).")
 
+flags.DEFINE_string(
+    "gen_checkpoint", None,
+    "Original Grover checkpoint (usually from a pre-trained model).")
+
 flags.DEFINE_integer(
     "max_seq_length", 1024,
     "The maximum total input sequence length after BPE tokenization. "
@@ -146,13 +150,15 @@ def main(_):
                                     learning_rate=FLAGS.learning_rate,
                                     num_train_steps=FLAGS.num_train_steps,
                                     num_warmup_steps=FLAGS.num_warmup_steps,
+                                    gen_checkpoint=FLAGS.gen_checkpoint,
                                     )
 
     # If TPU is not available, this will fall back to normal Estimator on CPU
     # or GPU.
     est = tf.estimator.Estimator(
         model_fn=model_fn,
-        config=tf.estimator.RunConfig(session_config=run_config,
+        config=tf.estimator.RunConfig(
+            session_config=run_config,
             train_distribute=strategy,
             tf_random_seed=FLAGS.seed),
         model_dir=model_dir,
