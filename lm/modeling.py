@@ -506,9 +506,9 @@ class GroverModelResidual(object):
         if self.config.mask_padding:
             label_weights = tf.cast(tf.not_equal(tf.reshape(self.input_ids, [-1]),
                                                  self.pad_token_id),
-                                    dtype=self.hidden_state.dtype)
+                                    dtype=tf.float32)
         else:
-            label_weights = tf.reshape(tf.ones_like(self.input_ids, dtype=self.hidden_state.dtype), (-1,))
+            label_weights = tf.reshape(tf.ones_like(self.input_ids, dtype=self.float32), (-1,))
 
         assert config.max_position_embeddings >= self.seq_length
         if cache is None:
