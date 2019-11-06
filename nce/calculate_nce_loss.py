@@ -211,20 +211,27 @@ with tf.Session(config=tf_config, graph=tf.Graph()) as sess:
         assert prob_masked.shape[0] == noise_token_chunk.shape[0]
         noise_prob_chunks.append(noise_prob_masked)
     noise_tokens = np.concatenate(noise_token_chunks, axis=0)
-    noise_probs = np.concatenate(noise_prob_chunks, axis=0)
+    n_probs = np.concatenate(noise_prob_chunks, axis=0)
     assert noise_tokens.shape[0] > args.fixed_sample_size, noise_tokens.shape
     noise_tokens = noise_tokens[:args.fixed_sample_size]
-    noise_probs = noise_probs[:args.fixed_sample_size]
+    n_probs = n_probs[:args.fixed_sample_size]
     # evaluate the noise samples under our model
     noise_probs_under_model = get_seq_probs(seqs=noise_tokens,
                                             batch_size=args.batch_size,
                                             token_place_holders=all_tokens,
                                             num_gpus=args.num_gpus,
                                             tf_outputs=merged_probs)
-    assert noise_probs_under_model.shape == noise_probs.shape
+    noise_probs_sanity_check = get_seq_probs(seqs=noise_tokens,
+                                             batch_size=args.batch_size,
+                                             token_place_holders=all_tokens,
+                                             num_gpus=args.num_gpus,
+                                             tf_outputs=merged_noise_probs)
+    diff = noise_probs_sanity_check - n_probs
+    print(f'sanity check: {np.sum(diff*diff)}')
+    assert noise_probs_under_model.shape == n_probs.shape
 
-    s_bar_noise = logsumexp(np.reshape(noise_probs_under_model, (-1,)) - np.reshape(noise_probs, (-1,)), keepdims=True).reshape((-1,))
-    print(f's_bar_noise: {s_bar_noise} # of noise samples: {noise_probs.shape}')
+    s_bar_noise = logsumexp(np.reshape(noise_probs_under_model, (-1,)) - np.reshape(n_probs, (-1,)), keepdims=True).reshape((-1,))
+    print(f's_bar_noise: {s_bar_noise} # of noise samples: {n_probs.shape}')
 
     # evaluate input tensors under both noise and our model
     from math import ceil
