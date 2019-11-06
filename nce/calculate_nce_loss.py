@@ -221,7 +221,7 @@ with tf.Session(config=tf_config, graph=tf.Graph()) as sess:
                                             tf_outputs=merged_probs)
     assert noise_probs_under_model.shape == noise_probs.shape
 
-    s_bar_noise = logsumexp(np.reshape(noise_probs_under_model, (-1,)) - np.reshape(noise_probs, (-1,)))
+    s_bar_noise = logsumexp(np.reshape(noise_probs_under_model, (-1,)) - np.reshape(noise_probs, (-1,)), keepdims=True).reshape((-1,))
 
     # evaluate input tensors under both noise and our model
     from math import ceil
