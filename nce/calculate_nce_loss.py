@@ -120,12 +120,12 @@ def restore(scope, checkpoint):
 context_formatted = [encoder.__dict__['begin_article'], ]
 
 
-def get_seq_probs(seqs, batch_size, token_place_holders, num_gpus, tf_outputs):
+def get_seq_probs(seqs, batch_size, token_place_holders, num_gpus, tf_outputs, ignore_ids, ignore_ids_np):
     outputs = []
     num_batches = int(ceil(seqs.shape[0] / batch_size))
     for batch in tqdm(range(num_batches), disable=None):
         this_batch: np.ndarray = seqs[batch_size * batch: batch_size * (batch + 1)]
-        feed_dict = {}
+        feed_dict = {ignore_ids: ignore_ids_np}
         # pad to fill all GPUs
         if this_batch.shape[0] < batch_size:
             to_append = np.zeros((batch_size - this_batch.shape[0],
@@ -154,6 +154,7 @@ with tf.Session(config=tf_config, graph=tf.Graph()) as sess:
     eos_token = tf.placeholder(tf.int32, [])
     ignore_ids = tf.placeholder(tf.bool, [news_config.vocab_size])
     ignore_ids_np = np.array(encoder.special_tokens_onehot)
+    dummy_ignore_ids_np = np.zeros_like(ignore_ids_np)
     ignore_ids_np[encoder.__dict__['end_article']] = 0
     for i in range(args.num_gpus):
         with tf.device('/gpu:' + str(i)):
@@ -167,7 +168,8 @@ with tf.Session(config=tf_config, graph=tf.Graph()) as sess:
             # actual examples
             tokens = tf.placeholder(tf.int32, [batch_size_per_chunk, args.seq_length])
             all_tokens.append(tokens)
-            probs = tf.stop_gradient(eval_seq(news_config, tokens, args.correction_factor, baseline=False))
+            probs = tf.stop_gradient(eval_seq(news_config, tokens, args.correction_factor, baseline=False,
+                                              ignore_ids=ignore_ids))
             all_probs.append(probs)
 
             noise_probs = tf.stop_gradient(eval_seq(noise_news_config,
@@ -221,12 +223,16 @@ with tf.Session(config=tf_config, graph=tf.Graph()) as sess:
                                             batch_size=args.batch_size * args.num_gpus,
                                             token_place_holders=all_tokens,
                                             num_gpus=args.num_gpus,
-                                            tf_outputs=merged_probs)
+                                            tf_outputs=merged_probs,
+                                            ignore_ids_np=dummy_ignore_ids_np,
+                                            ignore_ids=ignore_ids)
     noise_probs_sanity_check = get_seq_probs(seqs=noise_tokens,
                                              batch_size=args.batch_size * args.num_gpus,
                                              token_place_holders=all_tokens,
                                              num_gpus=args.num_gpus,
-                                             tf_outputs=merged_noise_probs)
+                                             tf_outputs=merged_noise_probs,
+                                             ignore_ids_np=ignore_ids_np,
+                                             ignore_ids=ignore_ids)
     diff = noise_probs_sanity_check - n_probs
     print(f'sanity check: {np.sum(diff*diff)} {diff}')
     assert noise_probs_under_model.shape == n_probs.shape
@@ -246,12 +252,16 @@ with tf.Session(config=tf_config, graph=tf.Graph()) as sess:
         input_probs_under_model = get_seq_probs(seqs=all_seqs,
                                                 batch_size=args.batch_size * args.num_gpus,
                                                 token_place_holders=all_tokens,
-                                                num_gpus=args.num_gpus, tf_outputs=merged_probs)
+                                                num_gpus=args.num_gpus, tf_outputs=merged_probs,
+                                                ignore_ids=ignore_ids,
+                                                ignore_ids_np=dummy_ignore_ids_np)
 
         input_probs_under_noise = get_seq_probs(seqs=all_seqs,
                                                 batch_size=args.batch_size * args.num_gpus,
                                                 token_place_holders=all_tokens,
-                                                num_gpus=args.num_gpus, tf_outputs=merged_noise_probs)
+                                                num_gpus=args.num_gpus, tf_outputs=merged_noise_probs,
+                                                ignore_ids=ignore_ids,
+                                                ignore_ids_np=ignore_ids_np)
 
         s_bar_real = input_probs_under_model - input_probs_under_noise
         print(f's_bar_real: {s_bar_real}')
