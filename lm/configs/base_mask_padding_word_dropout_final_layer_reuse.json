@@ -13,5 +13,6 @@
   "word_dropout_prob": 0.1,
   "final_projection_layer": true,
   "reuse_gen": true,
-  "additional_transformer_layers": 4
+  "additional_transformer_layers": 4,
+  "truncate_right": true
 }
