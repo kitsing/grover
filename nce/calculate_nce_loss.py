@@ -222,7 +222,7 @@ with tf.Session(config=tf_config, graph=tf.Graph()) as sess:
                                             num_gpus=args.num_gpus,
                                             tf_outputs=merged_probs)
     noise_probs_sanity_check = get_seq_probs(seqs=noise_tokens,
-                                             batch_size=args.batch_size,
+                                             batch_size=args.batch_size * args.num_gpus,
                                              token_place_holders=all_tokens,
                                              num_gpus=args.num_gpus,
                                              tf_outputs=merged_noise_probs)
