@@ -198,7 +198,7 @@ with tf.Session(config=tf_config, graph=tf.Graph()) as sess:
                                                                                dtype=np.float32)}
                                                        )
         eos_positions = np.argmax(noise_token_chunk == encoder.__dict__['end_article'], axis=1)
-        valid_seqs = (eos_positions == 0)
+        valid_seqs = (eos_positions != 0)
         mask = np.tile(np.arange(1025, dtype=np.int32)[None, :], (eos_positions.shape[0], 1))
         masked = mask <= eos_positions[:, None]
         noise_token_chunk = np.where(masked, noise_token_chunk, encoder.padding)[valid_seqs]
@@ -212,7 +212,7 @@ with tf.Session(config=tf_config, graph=tf.Graph()) as sess:
 
     noise_tokens = np.concatenate(noise_token_chunks, axis=0)
     noise_probs = np.concatenate(noise_prob_chunks, axis=0)
-
+    print(f'noise probs: {noise_probs}') 
     # evaluate the noise samples under our model
     noise_probs_under_model = get_seq_probs(seqs=noise_tokens,
                                             batch_size=args.batch_size,
@@ -222,6 +222,7 @@ with tf.Session(config=tf_config, graph=tf.Graph()) as sess:
     assert noise_probs_under_model.shape == noise_probs.shape
 
     s_bar_noise = logsumexp(np.reshape(noise_probs_under_model, (-1,)) - np.reshape(noise_probs, (-1,)), keepdims=True).reshape((-1,))
+    print(f's_bar_noise: {s_bar_noise} # of noise samples: {noise_probs.shape}')
 
     # evaluate input tensors under both noise and our model
     from math import ceil
@@ -243,8 +244,10 @@ with tf.Session(config=tf_config, graph=tf.Graph()) as sess:
                                                 num_gpus=args.num_gpus, tf_outputs=merged_noise_probs)
 
         s_bar_real = input_probs_under_model - input_probs_under_noise
+        print(f's_bar_real: {s_bar_real}')
         s_bar_noise_expanded = np.tile(s_bar_noise[np.newaxis, :], (s_bar_real.shape[0], 1))
-        classification_z = logsumexp(np.concatenate((s_bar_real, s_bar_noise_expanded), axis=1), axis=1)
+        concatenated = np.concatenate((s_bar_real[:, np.newaxis], s_bar_noise_expanded), axis=1)
+        classification_z = logsumexp(concatenated, axis=1)
         loss = -(s_bar_real - classification_z)
         output_fname = f'{args.output_path}/{basename(output_fname)}.loss.npz'
         np.savez(output_fname, loss=loss)
