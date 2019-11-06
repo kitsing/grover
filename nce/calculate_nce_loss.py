@@ -271,5 +271,5 @@ with tf.Session(config=tf_config, graph=tf.Graph()) as sess:
         output_fname = f'{args.output_path}/{basename(output_fname)}.loss.npz'
         baseline_results=np.log(float(n_probs.shape[0]) + 1.)
         results = np.mean(loss)
-        print(f'results: {results} baseline results: {baseline_results}')
+        print(f'results: {results} baseline results: {baseline_results} loss: {loss}')
         np.savez(output_fname, loss=loss, num_noises=n_probs.shape[0])
