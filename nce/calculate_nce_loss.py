@@ -250,4 +250,7 @@ with tf.Session(config=tf_config, graph=tf.Graph()) as sess:
         classification_z = logsumexp(concatenated, axis=1)
         loss = -(s_bar_real - classification_z)
         output_fname = f'{args.output_path}/{basename(output_fname)}.loss.npz'
-        np.savez(output_fname, loss=loss)
+        baseline_results=np.log(float(noise_probs.shape[0]) + 1.)
+        results = np.mean(loss)
+        print(f'results: {results} baseline results: {baseline_results}')
+        np.savez(output_fname, loss=loss, num_noises=noise_probs.shape[0])
