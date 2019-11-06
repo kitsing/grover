@@ -12,6 +12,7 @@ from os import environ
 from os.path import basename
 from random import seed as rnd_seed
 from scipy.special import logsumexp
+from math import ceil
 
 parser = argparse.ArgumentParser(description='Evaluation')
 parser.add_argument(
@@ -139,7 +140,7 @@ def get_seq_probs(seqs, batch_size, token_place_holders, num_gpus, tf_outputs):
 
 
 with tf.Session(config=tf_config, graph=tf.Graph()) as sess:
-    batch_size_per_chunk = 8
+    batch_size_per_chunk = args.batch_size
     all_tokens = []
     all_probs = []
     all_noise_probs = []
