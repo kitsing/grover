@@ -68,7 +68,7 @@ seed = args.seed
 rnd_seed(seed)
 tf.set_random_seed(seed)
 
-files_to_open = sorted(glob(args.files))
+files_to_open = sorted(glob(args.file))
 files_chunk = len(files_to_open) // args.num_folds
 our_files = files_to_open[args.fold * files_chunk:(args.fold + 1) * files_chunk]
 
@@ -202,12 +202,12 @@ with tf.Session(config=tf_config, graph=tf.Graph()) as sess:
                                                        )
         eos_positions = np.argmax(noise_token_chunk == encoder.__dict__['end_article'], axis=1)
         mask = np.tile(np.arange(1025, dtype=np.int32)[None, :], (eos_positions.shape[0], 1))
-        masked = mask <= eos_positions
-        noise_token_chunks = np.where(masked, noise_token_chunk, encoder.padding)
+        masked = mask <= eos_positions[:, None]
+        noise_token_chunk = np.where(masked, noise_token_chunk, encoder.padding)
         noise_token_chunks.append(noise_token_chunk)
 
         prob_mask = masked[:, 1:]
-        prob_masked = prob_mask * noise_prob_chunk[:, -1]
+        prob_masked = prob_mask * noise_prob_chunk
         noise_prob_masked = np.sum(prob_masked, axis=1)
         noise_prob_chunks.append(noise_prob_masked)
 
