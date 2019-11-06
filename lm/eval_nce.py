@@ -11,6 +11,7 @@ from tqdm import tqdm
 from os import environ
 from os.path import basename
 from random import seed as rnd_seed
+from math import ceil
 
 parser = argparse.ArgumentParser(description='Evaluation')
 parser.add_argument(
@@ -61,7 +62,7 @@ rnd_seed(seed)
 tf.set_random_seed(seed)
 
 files_to_open = sorted(glob(args.files))
-files_chunk = len(files_to_open) // args.num_folds
+files_chunk = int(ceil(len(files_to_open) / args.num_folds))
 our_files = files_to_open[args.fold * files_chunk:(args.fold + 1) * files_chunk]
 
 encoder = get_encoder()
