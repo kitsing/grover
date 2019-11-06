@@ -36,7 +36,7 @@ def main():
                 continue
             example.ParseFromString(record)
             record = [int(_) for _ in example.features.feature['input_ids'].int64_list.value]
-            to_write.append(np.array(record, dtype=np.int32))
+            to_write.append(np.array(record, dtype=np.int32).reshape((1, -1)))
             break
     concatenated = np.concatenate(to_write, axis=0)
 
