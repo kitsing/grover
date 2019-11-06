@@ -197,14 +197,16 @@ with tf.Session(config=tf_config, graph=tf.Graph()) as sess:
                                                                                dtype=np.float32)}
                                                        )
         eos_positions = np.argmax(noise_token_chunk == encoder.__dict__['end_article'], axis=1)
+        valid_seqs = (eos_positions == 0)
         mask = np.tile(np.arange(1025, dtype=np.int32)[None, :], (eos_positions.shape[0], 1))
         masked = mask <= eos_positions[:, None]
-        noise_token_chunk = np.where(masked, noise_token_chunk, encoder.padding)
+        noise_token_chunk = np.where(masked, noise_token_chunk, encoder.padding)[valid_seqs]
         noise_token_chunks.append(noise_token_chunk)
 
         prob_mask = masked[:, 1:]
-        prob_masked = prob_mask * noise_prob_chunk
+        prob_masked = (prob_mask * noise_prob_chunk)[valid_seqs]
         noise_prob_masked = np.sum(prob_masked, axis=1)
+        assert prob_masked.shape[0] == noise_token_chunk.shape[0]
         noise_prob_chunks.append(noise_prob_masked)
 
     noise_tokens = np.concatenate(noise_token_chunks, axis=0)
