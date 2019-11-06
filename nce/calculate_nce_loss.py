@@ -217,7 +217,7 @@ with tf.Session(config=tf_config, graph=tf.Graph()) as sess:
     noise_probs = noise_probs[:args.fixed_sample_size]
     # evaluate the noise samples under our model
     noise_probs_under_model = get_seq_probs(seqs=noise_tokens,
-                                            batch_size=args.batch_size,
+                                            batch_size=args.batch_size * args.num_gpus,
                                             token_place_holders=all_tokens,
                                             num_gpus=args.num_gpus,
                                             tf_outputs=merged_probs)
@@ -236,12 +236,12 @@ with tf.Session(config=tf_config, graph=tf.Graph()) as sess:
     with np.load(args.file) as loaded_numpy:
         all_seqs = loaded_numpy['tokens']
         input_probs_under_model = get_seq_probs(seqs=all_seqs,
-                                                batch_size=args.batch_size,
+                                                batch_size=args.batch_size * args.num_gpus,
                                                 token_place_holders=all_tokens,
                                                 num_gpus=args.num_gpus, tf_outputs=merged_probs)
 
         input_probs_under_noise = get_seq_probs(seqs=all_seqs,
-                                                batch_size=args.batch_size,
+                                                batch_size=args.batch_size * args.num_gpus,
                                                 token_place_holders=all_tokens,
                                                 num_gpus=args.num_gpus, tf_outputs=merged_noise_probs)
 
