@@ -173,7 +173,8 @@ with tf.Session(config=tf_config, graph=tf.Graph()) as sess:
             noise_probs = tf.stop_gradient(eval_seq(noise_news_config,
                                                     tokens,
                                                     args.correction_factor,
-                                                    baseline=True, gen_scope='newslm'))
+                                                    baseline=True, gen_scope='newslm',
+                                                    ignore_ids=ignore_ids))
             all_noise_probs.append(noise_probs)
 
     with tf.device('/cpu:0'):

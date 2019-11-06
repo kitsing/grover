@@ -114,11 +114,14 @@ with tf.Session(config=tf_config, graph=tf.Graph()) as sess:
     all_tokens = []
 
     all_probs = []
+    ignore_ids = tf.placeholder(tf.bool, [news_config.vocab_size])
+    ignore_ids_np = np.array(encoder.special_tokens_onehot)
+    ignore_ids_np[encoder.__dict__['end_article']] = 0
     for i in range(args.num_gpus):
         with tf.device('/gpu:' + str(i)):
             tokens = tf.placeholder(tf.int32, [args.batch_size // args.num_gpus, args.seq_length])
             all_tokens.append(tokens)
-            probs = eval_seq(news_config, tokens, args.correction_factor, baseline=args.baseline)
+            probs = eval_seq(news_config, tokens, args.correction_factor, baseline=args.baseline, ignore_ids=ignore_ids)
             all_probs.append(probs)
 
     with tf.device('/cpu:0'):
@@ -142,7 +145,7 @@ with tf.Session(config=tf_config, graph=tf.Graph()) as sess:
             num_batches = int(ceil(all_seqs.shape[0] / args.batch_size))
             for batch in tqdm(range(num_batches), disable=None):
                 this_batch: np.ndarray = all_seqs[args.batch_size * batch: args.batch_size * (batch + 1)]
-                feed_dict = {}
+                feed_dict = {ignore_ids: ignore_ids_np}
                 # pad to fill all GPUs
                 if this_batch.shape[0] < args.batch_size:
                     to_append = np.zeros((args.batch_size - this_batch.shape[0],

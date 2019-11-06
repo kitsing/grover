@@ -764,7 +764,7 @@ class GroverModel(object):
         logprobs_flat = tf.nn.log_softmax(self.logits_flat, axis=-1)
         return tf.reshape(logprobs_flat, [self.batch_size, self.seq_length, -1])
 
-    def per_seq_prob(self):
+    def per_seq_prob(self, ignore_ids: Optional = None):
         """
         this will only take `clean' tokens i.e. there can be no trailing non-padding symbols after EOS!
         :return:
@@ -774,7 +774,11 @@ class GroverModel(object):
         one_hot_labels = tf.one_hot(target_ids_flat,
                                     depth=self.config.vocab_size,
                                     dtype=self.logits_flat.dtype)
-        logprobs_flat = tf.nn.log_softmax(self.logits_flat, axis=-1)
+        if ignore_ids is not None:
+            logits_flat = self.logits_flat - tf.cast(ignore_ids[None], tf.float32) * 1e10
+        else:
+            logits_flat = self.logits_flat
+        logprobs_flat = tf.nn.log_softmax(logits_flat, axis=-1)
         selected_and_masked = label_weights * tf.reduce_sum(logprobs_flat * one_hot_labels, axis=[-1])
         per_seq_sum = tf.reduce_sum(tf.reshape(selected_and_masked, (-1, 1024)), axis=[-1])
         return per_seq_sum
@@ -1109,7 +1113,8 @@ def initialize_from_context(initial_context, ignore_ids, news_config, p_for_topp
     }
 
 
-def eval_seq(news_config: GroverConfig, tokens, correction_factor = 1., baseline: bool = False, gen_scope='gen'):
+def eval_seq(news_config: GroverConfig, tokens, correction_factor = 1., baseline: bool = False, gen_scope='gen',
+             ignore_ids: Optional = None):
     with tf.name_scope('evaluate_sequence'):
         gen_model = GroverModel(
             config=news_config,
@@ -1121,7 +1126,7 @@ def eval_seq(news_config: GroverConfig, tokens, correction_factor = 1., baseline
             do_cache=True,
             cache=None,
         )
-        lm_score = gen_model.per_seq_prob()
+        lm_score = gen_model.per_seq_prob(ignore_ids=ignore_ids)
         if baseline:
             return lm_score
 
