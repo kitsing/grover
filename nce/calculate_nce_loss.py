@@ -227,7 +227,7 @@ with tf.Session(config=tf_config, graph=tf.Graph()) as sess:
                                              num_gpus=args.num_gpus,
                                              tf_outputs=merged_noise_probs)
     diff = noise_probs_sanity_check - n_probs
-    print(f'sanity check: {np.sum(diff*diff)}')
+    print(f'sanity check: {np.sum(diff*diff)} {diff}')
     assert noise_probs_under_model.shape == n_probs.shape
 
     s_bar_noise = logsumexp(np.reshape(noise_probs_under_model, (-1,)) - np.reshape(n_probs, (-1,)), keepdims=True).reshape((-1,))
@@ -259,7 +259,7 @@ with tf.Session(config=tf_config, graph=tf.Graph()) as sess:
         classification_z = logsumexp(concatenated, axis=1)
         loss = -(s_bar_real - classification_z)
         output_fname = f'{args.output_path}/{basename(output_fname)}.loss.npz'
-        baseline_results=np.log(float(noise_probs.shape[0]) + 1.)
+        baseline_results=np.log(float(n_probs.shape[0]) + 1.)
         results = np.mean(loss)
         print(f'results: {results} baseline results: {baseline_results}')
-        np.savez(output_fname, loss=loss, num_noises=noise_probs.shape[0])
+        np.savez(output_fname, loss=loss, num_noises=n_probs.shape[0])
