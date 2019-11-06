@@ -58,6 +58,7 @@ parser.add_argument('--correction-factor', default=1., type=float) # correction 
 parser.add_argument('--seq-length', default=1025, type=int)
 parser.add_argument('--output-path', default='./', type=str)
 parser.add_argument('--num-gpus', default=8, type=int)
+parser.add_argument('--fixed-sample-size', default=64, type=int)
 
 args = parser.parse_args()
 args.fold = int(environ['SLURM_PROCID'])
@@ -209,10 +210,11 @@ with tf.Session(config=tf_config, graph=tf.Graph()) as sess:
         noise_prob_masked = np.sum(prob_masked, axis=1)
         assert prob_masked.shape[0] == noise_token_chunk.shape[0]
         noise_prob_chunks.append(noise_prob_masked)
-
     noise_tokens = np.concatenate(noise_token_chunks, axis=0)
     noise_probs = np.concatenate(noise_prob_chunks, axis=0)
-    print(f'noise probs: {noise_probs}') 
+    assert noise_tokens.shape[0] > args.fixed_sample_size
+    noise_tokens = noise_tokens[:args.fixed_sample_size]
+    noise_probs = noise_probs[:args.fixed_sample_size]
     # evaluate the noise samples under our model
     noise_probs_under_model = get_seq_probs(seqs=noise_tokens,
                                             batch_size=args.batch_size,
