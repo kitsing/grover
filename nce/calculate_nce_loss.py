@@ -190,7 +190,7 @@ with tf.Session(config=tf_config, graph=tf.Graph()) as sess:
     noise_token_chunks = []
     noise_prob_chunks = []
     for chunk in tqdm(range(args.num_noise_chunks), disable=None):
-        noise_token_chunk, noise_prob_chunk = sess.run([sampled_tokens, sampled_probs],
+        noise_token_chunk, noise_prob_chunk = sess.run([merged_sampled_tokens, merged_sampled_probs],
                                                        feed_dict={
                                                            initial_context: [context_formatted] * batch_size_per_chunk,
                                                            eos_token: encoder.__dict__['end_article'],
