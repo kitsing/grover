@@ -44,6 +44,7 @@ class GroverConfig(object):
                  final_projection_layer: bool = False,
                  reuse_gen: bool = False,
                  additional_transformer_layers: int = 4,
+                 truncate_right: bool = False,
                  scope_prefix='newslm'):
         """Constructs NewsConfig.
 
@@ -84,6 +85,7 @@ class GroverConfig(object):
         self.final_projection_layer = final_projection_layer
         self.reuse_gen = reuse_gen
         self.additional_transformer_layers = additional_transformer_layers
+        self.truncate_right = truncate_right
 
     @classmethod
     def from_dict(cls, json_object):
@@ -486,10 +488,16 @@ class GroverModelResidual(object):
         original_batch_size = input_ids.shape[0]
         if not ignore_noise:
             self.k = noises.shape[1]
-            concatenated = tf.concat((input_ids[:, None, :], noises), axis=1)[:, :, :-1]
+            if self.config.truncate_right:
+                concatenated = tf.concat((input_ids[:, None, :], noises), axis=1)[:, :, :-1]
+            else:
+                concatenated = tf.concat((input_ids[:, None, :], noises), axis=1)[:, :, 1:]
         else:
             self.k = 0
-            concatenated = input_ids[:, None, :-1]
+            if self.config.truncate_right:
+                concatenated = input_ids[:, None, :-1]
+            else:
+                concatenated = input_ids[:, None, 1:]
         self.input_ids = tf.reshape(concatenated, (-1, concatenated.shape[2]))
         self.batch_size, self.seq_length = get_shape_list(self.input_ids, 2)
 
