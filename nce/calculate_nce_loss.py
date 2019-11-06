@@ -212,7 +212,7 @@ with tf.Session(config=tf_config, graph=tf.Graph()) as sess:
         noise_prob_chunks.append(noise_prob_masked)
     noise_tokens = np.concatenate(noise_token_chunks, axis=0)
     noise_probs = np.concatenate(noise_prob_chunks, axis=0)
-    assert noise_tokens.shape[0] > args.fixed_sample_size
+    assert noise_tokens.shape[0] > args.fixed_sample_size, noise_tokens.shape
     noise_tokens = noise_tokens[:args.fixed_sample_size]
     noise_probs = noise_probs[:args.fixed_sample_size]
     # evaluate the noise samples under our model
