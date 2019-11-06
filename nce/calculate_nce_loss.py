@@ -264,8 +264,8 @@ with tf.Session(config=tf_config, graph=tf.Graph()) as sess:
 
         s_bar_real = input_probs_under_model - input_probs_under_noise
         print(f's_bar_real: {s_bar_real}')
-        s_bar_noise_expanded = np.tile(s_bar_noise[np.newaxis, :], (s_bar_real.shape[0], 1))
-        concatenated = np.concatenate((s_bar_real[:, np.newaxis], s_bar_noise_expanded), axis=1)
+        s_bar_noise_expanded = np.tile(s_bar_noise.reshape(-1, 1), (s_bar_real.shape[0], 1))
+        concatenated = np.concatenate((s_bar_real.reshape(-1, 1), s_bar_noise_expanded), axis=1)
         classification_z = logsumexp(concatenated, axis=1)
         loss = -(s_bar_real - classification_z)
         output_fname = f'{args.output_path}/{basename(output_fname)}.loss.npz'
