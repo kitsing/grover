@@ -154,7 +154,6 @@ with tf.Session(config=tf_config, graph=tf.Graph()) as sess:
     eos_token = tf.placeholder(tf.int32, [])
     ignore_ids = tf.placeholder(tf.bool, [news_config.vocab_size])
     ignore_ids_np = np.array(encoder.special_tokens_onehot)
-    dummy_ignore_ids_np = np.zeros_like(ignore_ids_np)
     ignore_ids_np[encoder.__dict__['end_article']] = 0
     for i in range(args.num_gpus):
         with tf.device('/gpu:' + str(i)):
@@ -224,7 +223,7 @@ with tf.Session(config=tf_config, graph=tf.Graph()) as sess:
                                             token_place_holders=all_tokens,
                                             num_gpus=args.num_gpus,
                                             tf_outputs=merged_probs,
-                                            ignore_ids_np=dummy_ignore_ids_np,
+                                            ignore_ids_np=ignore_ids_np,
                                             ignore_ids=ignore_ids)
     noise_probs_sanity_check = get_seq_probs(seqs=noise_tokens,
                                              batch_size=args.batch_size * args.num_gpus,
@@ -254,7 +253,7 @@ with tf.Session(config=tf_config, graph=tf.Graph()) as sess:
                                                 token_place_holders=all_tokens,
                                                 num_gpus=args.num_gpus, tf_outputs=merged_probs,
                                                 ignore_ids=ignore_ids,
-                                                ignore_ids_np=dummy_ignore_ids_np)
+                                                ignore_ids_np=ignore_ids_np)
 
         input_probs_under_noise = get_seq_probs(seqs=all_seqs,
                                                 batch_size=args.batch_size * args.num_gpus,

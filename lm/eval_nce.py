@@ -121,7 +121,8 @@ with tf.Session(config=tf_config, graph=tf.Graph()) as sess:
         with tf.device('/gpu:' + str(i)):
             tokens = tf.placeholder(tf.int32, [args.batch_size // args.num_gpus, args.seq_length])
             all_tokens.append(tokens)
-            probs = eval_seq(news_config, tokens, args.correction_factor, baseline=args.baseline, ignore_ids=ignore_ids)
+            probs = eval_seq(news_config, tokens, args.correction_factor, baseline=args.baseline, ignore_ids=ignore_ids,
+                             )
             all_probs.append(probs)
 
     with tf.device('/cpu:0'):
