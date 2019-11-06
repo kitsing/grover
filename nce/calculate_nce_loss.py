@@ -158,7 +158,7 @@ with tf.Session(config=tf_config, graph=tf.Graph()) as sess:
     for i in range(args.num_gpus):
         with tf.device('/gpu:' + str(i)):
             # sampled noises
-            sampled_tokens, sampled_probs = sample(news_config=news_config, initial_context=initial_context,
+            sampled_tokens, sampled_probs = sample(news_config=noise_news_config, initial_context=initial_context,
                                                    eos_token=eos_token, ignore_ids=ignore_ids, p_for_topp=p_for_topp,
                                                    do_topk=False, seed=i, max_out_tensor=True, vanilla=True)
             all_sampled_tokens.append(sampled_tokens)
@@ -173,7 +173,7 @@ with tf.Session(config=tf_config, graph=tf.Graph()) as sess:
             noise_probs = tf.stop_gradient(eval_seq(noise_news_config,
                                                     tokens,
                                                     args.correction_factor,
-                                                    baseline=True))
+                                                    baseline=True, gen_scope='newslm'))
             all_noise_probs.append(noise_probs)
 
     with tf.device('/cpu:0'):

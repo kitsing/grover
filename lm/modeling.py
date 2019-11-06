@@ -1109,14 +1109,14 @@ def initialize_from_context(initial_context, ignore_ids, news_config, p_for_topp
     }
 
 
-def eval_seq(news_config: GroverConfig, tokens, correction_factor = 1., baseline: bool = False):
+def eval_seq(news_config: GroverConfig, tokens, correction_factor = 1., baseline: bool = False, gen_scope='gen'):
     with tf.name_scope('evaluate_sequence'):
         gen_model = GroverModel(
             config=news_config,
             is_training=False,
             input_ids=tokens,
             reuse=tf.AUTO_REUSE,
-            scope='gen',
+            scope=gen_scope,
             chop_off_last_token=True,
             do_cache=True,
             cache=None,
