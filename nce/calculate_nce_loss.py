@@ -68,10 +68,6 @@ seed = args.seed
 rnd_seed(seed)
 tf.set_random_seed(seed)
 
-files_to_open = sorted(glob(args.file))
-files_chunk = len(files_to_open) // args.num_folds
-our_files = files_to_open[args.fold * files_chunk:(args.fold + 1) * files_chunk]
-
 encoder = get_encoder()
 news_config = GroverConfig.from_json_file(args.model_config_fn)
 noise_news_config = GroverConfig.from_json_file(args.noise_model_config_fn)
@@ -191,7 +187,7 @@ with tf.Session(config=tf_config, graph=tf.Graph()) as sess:
     # get noise samples first
     noise_token_chunks = []
     noise_prob_chunks = []
-    for chunk in range(args.num_noise_chunks):
+    for chunk in tqdm(range(args.num_noise_chunks), disable=None):
         noise_token_chunk, noise_prob_chunk = sess.run([sampled_tokens, sampled_probs],
                                                        feed_dict={
                                                            initial_context: [context_formatted] * batch_size_per_chunk,
