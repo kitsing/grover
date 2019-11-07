@@ -544,7 +544,8 @@ class GroverModelResidual(object):
         caches = [None] * config.num_hidden_layers
         self.cache_length = 0
 
-        with tf.variable_scope(scope, default_name='newslm', reuse=reuse):
+        with tf.variable_scope(scope, default_name='newslm', reuse=reuse,
+                               name_or_scope=scope):
             input_hidden_state, residuals = self.score_seq(caches, config, do_cache, is_training, label_weights, self.input_ids,
                                                            reuse, self.batch_size)
             self.hidden_state = input_hidden_state
@@ -995,16 +996,15 @@ def nce_model_fn_builder(config: GroverConfig, init_checkpoint,
         is_training = (mode == tf.estimator.ModeKeys.TRAIN)
 
         reuse_gen = config.reuse_gen
-        with tf.name_scope('residual'):
-            residual_model = GroverModelResidual(
-                config=config,
-                is_training=is_training,
-                input_ids=input_ids,
-                noises=noises,
-                pad_token_id=config.pad_token_id,
-                reuse=tf.AUTO_REUSE,
-                ignore_noise=(mode == tf.estimator.ModeKeys.PREDICT)
-            )
+        residual_model = GroverModelResidual(
+            config=config,
+            is_training=is_training,
+            input_ids=input_ids,
+            noises=noises,
+            pad_token_id=config.pad_token_id,
+            reuse=tf.AUTO_REUSE,
+            ignore_noise=(mode == tf.estimator.ModeKeys.PREDICT)
+        )
 
         total_loss = residual_model.total_loss()
         reg_loss = 0
