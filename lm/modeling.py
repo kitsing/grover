@@ -580,7 +580,7 @@ class GroverModelResidual(object):
         # forth from a 3D tensor to a 2D tensor. Re-shapes are normally free on
         # the GPU/CPU but may not be free on the TPU, so we want to minimize them to
         # help the optimizer.
-        hidden_state = tf.reshape(embeddings, [original_batch_size, self.config.hidden_size])
+        hidden_state = tf.reshape(embeddings, [original_batch_size * self.seq_length, self.config.hidden_size])
         new_kvs = []
         for layer_idx, layer_cache in enumerate(caches):
             with tf.variable_scope('layer{:02d}'.format(layer_idx)):
@@ -588,7 +588,7 @@ class GroverModelResidual(object):
                 attention_output, new_kv = attention_layer(
                     hidden_state,
                     mask,
-                    batch_size=original_batch_size,
+                    batch_size=original_batch_size * self.seq_length,
                     seq_length=self.seq_length,
                     size_per_head=config.hidden_size // config.num_attention_heads,
                     num_attention_heads=config.num_attention_heads,
@@ -629,7 +629,7 @@ class GroverModelResidual(object):
                         attention_output, new_kv = attention_layer(
                             hidden_state,
                             full_mask,
-                            batch_size=original_batch_size,
+                            batch_size=original_batch_size * self.seq_length,
                             seq_length=self.seq_length,
                             size_per_head=config.hidden_size * 2 // config.num_attention_heads,
                             num_attention_heads=config.num_attention_heads,
