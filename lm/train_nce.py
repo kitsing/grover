@@ -160,7 +160,8 @@ def main(_):
         config=tf.estimator.RunConfig(
             session_config=run_config,
             train_distribute=strategy,
-            tf_random_seed=FLAGS.seed),
+            tf_random_seed=FLAGS.seed,
+            keep_checkpoint_max=0,),
         model_dir=model_dir,
         params={'model_dir': model_dir}
     )

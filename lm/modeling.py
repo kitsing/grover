@@ -488,20 +488,25 @@ class GroverModelResidual(object):
 
         # autoencoder-like architecture
         original_batch_size = input_ids.shape[0]
+
+        if self.config.truncate_right:
+            input_ids = input_ids[:, -1]
+        else:
+            input_ids = input_ids[:, 1:]
+
+        self.input_ids = input_ids
+        self.batch_size, self.seq_length = get_shape_list(self.input_ids, 2)
+
         if not ignore_noise:
             self.k = noises.shape[1]
             if self.config.truncate_right:
-                concatenated = tf.concat((input_ids[:, None, :], noises), axis=1)[:, :, :-1]
+                noises = noises[:, :, -1]
             else:
-                concatenated = tf.concat((input_ids[:, None, :], noises), axis=1)[:, :, 1:]
+                noises = noises[:, :, 1:]
+            self.noises = tf.reshape(noises, (-1, noises.shape[2]))
+            self.noise_batch_size, _ = get_shape_list(self.noises, 2)
         else:
             self.k = 0
-            if self.config.truncate_right:
-                concatenated = input_ids[:, None, :-1]
-            else:
-                concatenated = input_ids[:, None, 1:]
-        self.input_ids = tf.reshape(concatenated, (-1, concatenated.shape[2]))
-        self.batch_size, self.seq_length = get_shape_list(self.input_ids, 2)
 
         if is_training and self.config.word_dropout_prob > 0.:
             from tensorflow.distributions import Bernoulli
@@ -513,149 +518,164 @@ class GroverModelResidual(object):
                                           (self.batch_size, self.seq_length),
                                           self.pad_token_id)
                                       )
+            if not ignore_noise:
+                noise_dropout_mask = b.sample(sample_shape=(self.noise_batch_size, self.seq_length))
+                self.noises = tf.where(noise_dropout_mask,
+                                       self.noises,
+                                       tf.fill(
+                                           (self.noise_batch_size, self.seq_length),
+                                           self.pad_token_id)
+                                       )
+
         if self.config.mask_padding:
             label_weights = tf.cast(tf.not_equal(tf.reshape(self.input_ids, [-1]),
                                                  self.pad_token_id),
                                     dtype=tf.float32)
+            if not ignore_noise:
+                noise_label_weights = tf.cast(tf.not_equal(tf.reshape(self.noises, [-1]),
+                                                 self.pad_token_id),
+                                              dtype=tf.float32)
         else:
             label_weights = tf.reshape(tf.ones_like(self.input_ids, dtype=tf.float32), (-1,))
+            if not ignore_noise:
+                noise_label_weights = tf.reshape(tf.ones_like(self.noises, dtype=tf.float32), (-1,))
 
         assert config.max_position_embeddings >= self.seq_length
-        if cache is None:
-            caches = [None] * config.num_hidden_layers
-            self.cache_length = 0
-        else:
-            batch_size_, num_layers_, two_, num_heads_, self.cache_length, features_ = get_shape_list(
-                cache, expected_rank=6)
-            assert batch_size_ == self.batch_size
-            assert num_layers_ == config.num_hidden_layers
-            assert two_ == 2
-            assert num_heads_ == config.num_attention_heads
-            assert features_ == (config.hidden_size // config.num_attention_heads)
-            caches = tf.unstack(cache, axis=1)
+        caches = [None] * config.num_hidden_layers
+        self.cache_length = 0
 
         with tf.variable_scope(scope, default_name='newslm', reuse=reuse):
-            with tf.variable_scope("embeddings"):
-                embeddings, self.embedding_table = embed(self.input_ids, config.vocab_size,
-                                                         config.hidden_size,
-                                                         position_offset=self.cache_length,
-                                                         initializer_range=config.initializer_range,
-                                                         max_position_embeddings=config.max_position_embeddings,
-                                                         use_one_hot_embeddings=True)
-
-            if self.config.reuse_gen:
-                # reusing the original model for embeddings. to ensure correctness we make use of the original masks
-                mask = get_attention_mask(self.seq_length, self.seq_length + self.cache_length, dtype=embeddings.dtype)
-            else:
-                # we don't really need masking
-                mask = tf.ones((self.seq_length, self.seq_length + self.cache_length), dtype=embeddings.dtype)
-
-            # We keep the representation as a 2D tensor to avoid re-shaping it back and
-            # forth from a 3D tensor to a 2D tensor. Re-shapes are normally free on
-            # the GPU/CPU but may not be free on the TPU, so we want to minimize them to
-            # help the optimizer.
-            hidden_state = tf.reshape(embeddings, [self.batch_size * self.seq_length, self.config.hidden_size])
-            new_kvs = []
-            for layer_idx, layer_cache in enumerate(caches):
-                with tf.variable_scope('layer{:02d}'.format(layer_idx)):
-                    # [batch_size * seq_length, hidden_size]
-                    attention_output, new_kv = attention_layer(
-                        hidden_state,
-                        mask,
-                        batch_size=self.batch_size,
-                        seq_length=self.seq_length,
-                        size_per_head=config.hidden_size // config.num_attention_heads,
-                        num_attention_heads=config.num_attention_heads,
-                        initializer_range=config.initializer_range,
-                        hidden_dropout_prob=self.config.hidden_dropout_prob,
-                        attention_probs_dropout_prob=self.config.attention_probs_dropout_prob,
-                        do_cache=do_cache,
-                        cache=layer_cache,
-                    )
-                    new_kvs.append(new_kv)
-
-                    # [batch_size * seq_length, hidden_size]
-                    hidden_state = residual_mlp_layer(hidden_state + attention_output,
-                                                      intermediate_size=config.intermediate_size,
-                                                      hidden_dropout_prob=self.config.hidden_dropout_prob)
-            if self.config.reuse_gen:
-                # have to stop gradient here as we don't want to finetune the generator (or do we?)
-                hidden_state = tf.stop_gradient(hidden_state) * label_weights[:, None]
-                # start some additional layers
-                if self.config.additional_transformer_layers > 0:
-                    with tf.variable_scope("additional_embeddings"):
-                        add_embeddings, \
-                        self.add_embedding_table = embed(self.input_ids, config.vocab_size,
-                                                         config.hidden_size,
-                                                         position_offset=self.cache_length,
-                                                         initializer_range=config.initializer_range,
-                                                         max_position_embeddings=config.max_position_embeddings,
-                                                         use_one_hot_embeddings=True)
-                    emb_shape = [self.batch_size * self.seq_length, self.config.hidden_size]
-                    additional_emb = tf.reshape(add_embeddings, emb_shape)
-                    hidden_state = tf.concat((hidden_state, additional_emb), axis=1)
-                    # we are no longer subject to the left-context limitation so we have a full mask here
-                    full_mask = tf.ones((self.seq_length, self.seq_length + self.cache_length), dtype=embeddings.dtype)
-
-                    for additional_layer_idx in range(self.config.additional_transformer_layers):
-                        with tf.variable_scope('additional_layer{:02d}'.format(additional_layer_idx)):
-                            # [batch_size * seq_length, hidden_size]
-                            attention_output, new_kv = attention_layer(
-                                hidden_state,
-                                full_mask,
-                                batch_size=self.batch_size,
-                                seq_length=self.seq_length,
-                                size_per_head=config.hidden_size * 2 // config.num_attention_heads,
-                                num_attention_heads=config.num_attention_heads,
-                                initializer_range=config.initializer_range,
-                                hidden_dropout_prob=self.config.hidden_dropout_prob,
-                                attention_probs_dropout_prob=self.config.attention_probs_dropout_prob,
-                                do_cache=do_cache,
-                                cache=layer_cache,
-                            )
-                            new_kvs.append(new_kv)
-
-                            # [batch_size * seq_length, hidden_size]
-                            hidden_state = residual_mlp_layer(hidden_state + attention_output,
-                                                              intermediate_size=config.intermediate_size,
-                                                              hidden_dropout_prob=self.config.hidden_dropout_prob)
-                    hidden_state = tf.layers.dense(tf.layers.dropout(hidden_state,
-                                                                     rate=self.config.hidden_dropout_prob,
-                                                                     training=is_training),
-                                                   self.config.hidden_size, name='additional_final_layer',
-                                                   )
-                    hidden_state = layer_norm(hidden_state, name='layer_normed_final_layer')
-            self.hidden_state = hidden_state
-        self.new_kvs = tf.stack(new_kvs, axis=1) if do_cache else None
-
-        if self.config.final_projection_layer:
-            self.residuals = tf.layers.dense(tf.layers.dropout(self.hidden_state, rate=self.config.hidden_dropout_prob,
-                                                               training=is_training),
-                                             1, name='discriminator_final_layer', use_bias=False,
-                                             reuse=reuse)
-            self.residuals = tf.reshape(tf.reshape(self.residuals, (-1,)) * label_weights,
-                                        (original_batch_size, self.k+1, self.seq_length)
-                                        )
-            self.residuals = tf.reduce_sum(self.residuals, axis=2)
-        else:
-            self.hidden_state = self.hidden_state * label_weights[:, None]
-            hid_state_restored = tf.reshape(self.hidden_state, [original_batch_size, self.k + 1, self.seq_length, -1])
-            self.residuals = tf.reduce_sum(hid_state_restored,
-                                           axis=(2, 3))
+            input_hidden_state, residuals = self.score_seq(caches, config, do_cache, is_training, label_weights, self.input_ids,
+                                                           reuse, self.batch_size)
+            self.hidden_state = input_hidden_state
+            self.residuals = tf.reshape(residuals, (original_batch_size, 1))
+            if not ignore_noise:
+                noise_hidden_state, noise_residuals = self.score_seq(caches, config, do_cache, is_training, noise_label_weights,
+                                                                     self.noises,
+                                                                     reuse, self.noise_batch_size)
+                self.noise_hidden_state = tf.reshape(noise_hidden_state, (self.batch_size, self.k, -1))
+                self.noise_residuals = tf.reshape(noise_residuals, (self.batch_size, self.k))
 
         # THE OUTPUT BIAS DOES NOT SPARK JOY
         # output_bias = tf.get_variable('output_bias', shape=[config.vocab_size], initializer=tf.zeros_initializer())
         # self.logits_flat = tf.nn.bias_add(self.logits_flat, output_bias)
 
+    def score_seq(self, caches, config, do_cache, is_training, label_weights, to_score,
+                  reuse, original_batch_size):
+        with tf.variable_scope("embeddings"):
+            embeddings, embedding_table = embed(to_score, config.vocab_size,
+                                                config.hidden_size,
+                                                position_offset=self.cache_length,
+                                                initializer_range=config.initializer_range,
+                                                max_position_embeddings=config.max_position_embeddings,
+                                                use_one_hot_embeddings=True)
+        if self.config.reuse_gen:
+            # reusing the original model for embeddings. to ensure correctness we make use of the original masks
+            mask = get_attention_mask(self.seq_length, self.seq_length + self.cache_length, dtype=embeddings.dtype)
+        else:
+            # we don't really need masking
+            mask = tf.ones((self.seq_length, self.seq_length + self.cache_length), dtype=embeddings.dtype)
+        # We keep the representation as a 2D tensor to avoid re-shaping it back and
+        # forth from a 3D tensor to a 2D tensor. Re-shapes are normally free on
+        # the GPU/CPU but may not be free on the TPU, so we want to minimize them to
+        # help the optimizer.
+        hidden_state = tf.reshape(embeddings, [original_batch_size, self.config.hidden_size])
+        new_kvs = []
+        for layer_idx, layer_cache in enumerate(caches):
+            with tf.variable_scope('layer{:02d}'.format(layer_idx)):
+                # [batch_size * seq_length, hidden_size]
+                attention_output, new_kv = attention_layer(
+                    hidden_state,
+                    mask,
+                    batch_size=original_batch_size,
+                    seq_length=self.seq_length,
+                    size_per_head=config.hidden_size // config.num_attention_heads,
+                    num_attention_heads=config.num_attention_heads,
+                    initializer_range=config.initializer_range,
+                    hidden_dropout_prob=self.config.hidden_dropout_prob,
+                    attention_probs_dropout_prob=self.config.attention_probs_dropout_prob,
+                    do_cache=do_cache,
+                    cache=layer_cache,
+                )
+                new_kvs.append(new_kv)
+
+                # [batch_size * seq_length, hidden_size]
+                hidden_state = residual_mlp_layer(hidden_state + attention_output,
+                                                  intermediate_size=config.intermediate_size,
+                                                  hidden_dropout_prob=self.config.hidden_dropout_prob)
+        if self.config.reuse_gen:
+            # have to stop gradient here as we don't want to finetune the generator (or do we?)
+            hidden_state = tf.stop_gradient(hidden_state) * label_weights[:, None]
+            # start some additional layers
+            if self.config.additional_transformer_layers > 0:
+                with tf.variable_scope("additional_embeddings"):
+                    add_embeddings, \
+                    add_embedding_table = embed(to_score, config.vocab_size,
+                                                config.hidden_size,
+                                                position_offset=self.cache_length,
+                                                initializer_range=config.initializer_range,
+                                                max_position_embeddings=config.max_position_embeddings,
+                                                use_one_hot_embeddings=True)
+                emb_shape = [original_batch_size * self.seq_length, self.config.hidden_size]
+                additional_emb = tf.reshape(add_embeddings, emb_shape)
+                hidden_state = tf.concat((hidden_state, additional_emb), axis=1)
+                # we are no longer subject to the left-context limitation so we have a full mask here
+                full_mask = tf.ones((self.seq_length, self.seq_length + self.cache_length), dtype=embeddings.dtype)
+
+                for additional_layer_idx in range(self.config.additional_transformer_layers):
+                    with tf.variable_scope('additional_layer{:02d}'.format(additional_layer_idx)):
+                        # [batch_size * seq_length, hidden_size]
+                        attention_output, new_kv = attention_layer(
+                            hidden_state,
+                            full_mask,
+                            batch_size=original_batch_size,
+                            seq_length=self.seq_length,
+                            size_per_head=config.hidden_size * 2 // config.num_attention_heads,
+                            num_attention_heads=config.num_attention_heads,
+                            initializer_range=config.initializer_range,
+                            hidden_dropout_prob=self.config.hidden_dropout_prob,
+                            attention_probs_dropout_prob=self.config.attention_probs_dropout_prob,
+                            do_cache=do_cache,
+                            cache=layer_cache,
+                        )
+                        new_kvs.append(new_kv)
+
+                        # [batch_size * seq_length, hidden_size]
+                        hidden_state = residual_mlp_layer(hidden_state + attention_output,
+                                                          intermediate_size=config.intermediate_size,
+                                                          hidden_dropout_prob=self.config.hidden_dropout_prob)
+                hidden_state = tf.layers.dense(tf.layers.dropout(hidden_state,
+                                                                 rate=self.config.hidden_dropout_prob,
+                                                                 training=is_training),
+                                               self.config.hidden_size, name='additional_final_layer',
+                                               )
+                hidden_state = layer_norm(hidden_state, name='layer_normed_final_layer')
+        if config.final_projection_layer:
+            residuals = tf.layers.dense(tf.layers.dropout(hidden_state, rate=config.hidden_dropout_prob,
+                                                          training=is_training),
+                                        1, name='discriminator_final_layer', use_bias=False,
+                                        reuse=reuse)
+            residuals = tf.reshape(tf.reshape(residuals, (-1,)) * label_weights,
+                                        (original_batch_size, self.seq_length)
+                                        )
+            residuals = tf.reduce_sum(residuals, axis=1)
+        else:
+            hidden_state = hidden_state * label_weights[:, None]
+            hid_state_restored = tf.reshape(hidden_state, [original_batch_size, self.seq_length, -1])
+            residuals = tf.reduce_sum(hid_state_restored,
+                                           axis=(1, 2))
+        return hidden_state, residuals
+
     def reg_g_loss(self):
-        noises = self.residuals[:, 1:]
+        noises = self.noise_residuals
         log_sum_exp = tf.reduce_logsumexp(noises, axis=1)
-        diff = log_sum_exp - tf.log(noises.shape[0])
-        return diff * diff
+        diff = log_sum_exp - tf.log(noises.shape[1])
+        return tf.reduce_mean(diff * diff, axis=0)
 
     def total_loss(self):
         if self.alpha == 1.:
-            total_loss = - (self.residuals[:, 0] - tf.reduce_logsumexp(self.residuals, axis=1))
+            full_z = tf.concat((self.residuals, self.noise_residuals), axis=1)
+            total_loss = - (self.residuals[:, 0] - tf.reduce_logsumexp(full_z, axis=1))
             return tf.reduce_mean(total_loss, axis=0)
         else:
             # TODO implement this!
@@ -982,6 +1002,7 @@ def nce_model_fn_builder(config: GroverConfig, init_checkpoint,
             input_ids=input_ids,
             noises=noises,
             pad_token_id=config.pad_token_id,
+            reuse=tf.AUTO_REUSE,
             ignore_noise=(mode == tf.estimator.ModeKeys.PREDICT)
         )
 
