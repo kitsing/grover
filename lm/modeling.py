@@ -45,6 +45,7 @@ class GroverConfig(object):
                  reuse_gen: bool = False,
                  additional_transformer_layers: int = 4,
                  truncate_right: bool = False,
+                 regularize_g: bool = False,
                  scope_prefix='newslm'):
         """Constructs NewsConfig.
 
@@ -86,6 +87,7 @@ class GroverConfig(object):
         self.reuse_gen = reuse_gen
         self.additional_transformer_layers = additional_transformer_layers
         self.truncate_right = truncate_right
+        self.regularize_g = regularize_g
 
     @classmethod
     def from_dict(cls, json_object):
@@ -622,6 +624,7 @@ class GroverModelResidual(object):
                                                                      training=is_training),
                                                    self.config.hidden_size, name='additional_final_layer',
                                                    )
+                    hidden_state = layer_norm(hidden_state, name='layer_normed_final_layer')
             self.hidden_state = hidden_state
         self.new_kvs = tf.stack(new_kvs, axis=1) if do_cache else None
 
@@ -643,6 +646,12 @@ class GroverModelResidual(object):
         # THE OUTPUT BIAS DOES NOT SPARK JOY
         # output_bias = tf.get_variable('output_bias', shape=[config.vocab_size], initializer=tf.zeros_initializer())
         # self.logits_flat = tf.nn.bias_add(self.logits_flat, output_bias)
+
+    def reg_g_loss(self):
+        noises = self.residuals[:, 1:]
+        log_sum_exp = tf.reduce_logsumexp(noises, axis=1)
+        diff = log_sum_exp - tf.log(noises.shape[0])
+        return diff * diff
 
     def total_loss(self):
         if self.alpha == 1.:
@@ -965,7 +974,6 @@ def nce_model_fn_builder(config: GroverConfig, init_checkpoint,
 
         is_training = (mode == tf.estimator.ModeKeys.TRAIN)
 
-        gen_config = copy.deepcopy(config)
         reuse_gen = config.reuse_gen
         gen_model: Optional[GroverModel] = None
         residual_model = GroverModelResidual(
@@ -978,9 +986,16 @@ def nce_model_fn_builder(config: GroverConfig, init_checkpoint,
         )
 
         total_loss = residual_model.total_loss()
+        reg_loss = 0
+
         if is_training:
+            if config.regularize_g:
+                reg_loss = residual_model.reg_g_loss()
+                loss_to_optimize = total_loss + 1e-2 * reg_loss
+            else:
+                loss_to_optimize = total_loss
             train_op, train_metrics = optimization_adafactor.create_optimizer(
-                total_loss, learning_rate, num_train_steps, num_warmup_steps)
+                loss_to_optimize, learning_rate, num_train_steps, num_warmup_steps)
             tvars = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES)
         else:
             train_op = None
@@ -1022,7 +1037,8 @@ def nce_model_fn_builder(config: GroverConfig, init_checkpoint,
                 loss=total_loss,
                 train_op=train_op,
                 training_hooks=[
-                    tf.train.LoggingTensorHook({'mean total loss': tf.metrics.mean(total_loss)[1]}, every_n_iter=100)],
+                    tf.train.LoggingTensorHook({'mean total loss': tf.metrics.mean(total_loss)[1],
+                                                'mean reg loss': tf.metrics.mean(reg_loss)[1]}, every_n_iter=100)],
                 )
 
         elif mode == tf.estimator.ModeKeys.EVAL:
