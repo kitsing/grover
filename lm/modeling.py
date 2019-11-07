@@ -588,7 +588,7 @@ class GroverModelResidual(object):
                 attention_output, new_kv = attention_layer(
                     hidden_state,
                     mask,
-                    batch_size=original_batch_size * self.seq_length,
+                    batch_size=original_batch_size,
                     seq_length=self.seq_length,
                     size_per_head=config.hidden_size // config.num_attention_heads,
                     num_attention_heads=config.num_attention_heads,
@@ -629,7 +629,7 @@ class GroverModelResidual(object):
                         attention_output, new_kv = attention_layer(
                             hidden_state,
                             full_mask,
-                            batch_size=original_batch_size * self.seq_length,
+                            batch_size=original_batch_size,
                             seq_length=self.seq_length,
                             size_per_head=config.hidden_size * 2 // config.num_attention_heads,
                             num_attention_heads=config.num_attention_heads,
