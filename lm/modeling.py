@@ -995,16 +995,16 @@ def nce_model_fn_builder(config: GroverConfig, init_checkpoint,
         is_training = (mode == tf.estimator.ModeKeys.TRAIN)
 
         reuse_gen = config.reuse_gen
-        gen_model: Optional[GroverModel] = None
-        residual_model = GroverModelResidual(
-            config=config,
-            is_training=is_training,
-            input_ids=input_ids,
-            noises=noises,
-            pad_token_id=config.pad_token_id,
-            reuse=tf.AUTO_REUSE,
-            ignore_noise=(mode == tf.estimator.ModeKeys.PREDICT)
-        )
+        with tf.name_scope('residual'):
+            residual_model = GroverModelResidual(
+                config=config,
+                is_training=is_training,
+                input_ids=input_ids,
+                noises=noises,
+                pad_token_id=config.pad_token_id,
+                reuse=tf.AUTO_REUSE,
+                ignore_noise=(mode == tf.estimator.ModeKeys.PREDICT)
+            )
 
         total_loss = residual_model.total_loss()
         reg_loss = 0
@@ -1033,14 +1033,6 @@ def nce_model_fn_builder(config: GroverConfig, init_checkpoint,
             (assignment_map, initialized_variable_names
              ) = get_assignment_map_from_checkpoint(tvars, init_checkpoint)
             tf.train.init_from_checkpoint(init_checkpoint, assignment_map)
-
-        if mode == tf.estimator.ModeKeys.PREDICT:
-            assert gen_model is not None
-            lm_score = gen_model.per_seq_prob()
-            residuals = residual_model.residuals[:, 0]
-            unnormalized_p = residuals + correction_factor * lm_score
-        else:
-            unnormalized_p = None
 
         tf.logging.info("**** Trainable Variables ****")
         for var in tvars:
@@ -1077,9 +1069,7 @@ def nce_model_fn_builder(config: GroverConfig, init_checkpoint,
                 eval_metrics=eval_metrics,
                 )
         elif mode == tf.estimator.ModeKeys.PREDICT:
-            output_spec = tf.estimator.EstimatorSpec(mode=mode,
-                                                     predictions={'labels': input_ids,
-                                                                  'unnormalized_p': unnormalized_p})
+            raise NotImplementedError
         else:
             raise NotImplementedError
 
