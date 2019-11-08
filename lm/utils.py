@@ -155,6 +155,17 @@ def get_attention_mask(nd, ns, *, dtype):
     return tf.cast(m, dtype)
 
 
+def get_inverted_mask(nd, ns, *, dtype):
+    """
+    this is a TPU compatible version of tf.matrix_band_part(tf.ones([nd, ns]), -1, ns-nd)
+    where the lower right triangle contains 1s
+    """
+    i = tf.range(nd)[:, None]
+    j = tf.range(ns)
+    m = i < j - ns + nd
+    return tf.cast(m, dtype)
+
+
 def get_assignment_map_from_checkpoint(tvars, init_checkpoint, prefix: Optional[str] = None,
                                        prefix_in_checkpoint: str='newslm',
                                        only_initialize_prefix: Optional[str] = None):

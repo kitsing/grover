@@ -22,7 +22,7 @@ import tensorflow as tf
 
 from lm import optimization_adafactor
 from lm.utils import get_assignment_map_from_checkpoint, get_shape_list, get_attention_mask, gelu, layer_norm, dropout, \
-    construct_scalar_host_call
+    construct_scalar_host_call, get_inverted_mask
 from typing import Optional
 
 class GroverConfig(object):
@@ -575,7 +575,8 @@ class GroverModelResidual(object):
             mask = get_attention_mask(self.seq_length, self.seq_length + self.cache_length, dtype=embeddings.dtype)
         else:
             # we don't really need masking
-            mask = tf.ones((self.seq_length, self.seq_length + self.cache_length), dtype=embeddings.dtype)
+            mask = get_inverted_mask(self.seq_length, self.seq_length + self.cache_length, dtype=embeddings.dtype)
+            # mask = tf.ones((self.seq_length, self.seq_length + self.cache_length), dtype=embeddings.dtype)
         # We keep the representation as a 2D tensor to avoid re-shaping it back and
         # forth from a 3D tensor to a 2D tensor. Re-shapes are normally free on
         # the GPU/CPU but may not be free on the TPU, so we want to minimize them to
@@ -605,6 +606,7 @@ class GroverModelResidual(object):
                                                   intermediate_size=config.intermediate_size,
                                                   hidden_dropout_prob=self.config.hidden_dropout_prob)
         if self.config.reuse_gen:
+            raise NotImplementedError
             # have to stop gradient here as we don't want to finetune the generator (or do we?)
             hidden_state = tf.stop_gradient(hidden_state) * label_weights[:, None]
             # start some additional layers
@@ -652,6 +654,7 @@ class GroverModelResidual(object):
                                                )
                 hidden_state = layer_norm(hidden_state, name='layer_normed_final_layer')
         if config.final_projection_layer:
+            raise NotImplementedError
             residuals = tf.layers.dense(tf.layers.dropout(hidden_state, rate=config.hidden_dropout_prob,
                                                           training=is_training),
                                         1, name='discriminator_final_layer', use_bias=False,
@@ -681,8 +684,9 @@ class GroverModelResidual(object):
     def total_loss(self):
         if self.alpha == 1.:
             full_z = tf.concat((self.residuals, self.noise_residuals), axis=1)
-            total_loss = - (self.residuals[:, 0] - tf.reduce_logsumexp(full_z, axis=1))
-            return tf.reduce_mean(total_loss, axis=0)
+            return - tf.reduce_mean(tf.nn.log_softmax(full_z, axis=1)[:, 0])
+            # total_loss = - (self.residuals[:, 0] - tf.reduce_logsumexp(full_z, axis=1))
+            # return tf.reduce_mean(total_loss, axis=0)
         else:
             # TODO implement this!
             raise NotImplementedError
