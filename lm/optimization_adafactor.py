@@ -18,9 +18,173 @@ from __future__ import print_function
 import re
 import tensorflow as tf
 from lm.utils import get_shape_list
+from abc import ABCMeta, abstractmethod
+import six
+
+class ProxyOptimizer(tf.train.Optimizer):
+    """
+    A transparent proxy which delegates all methods of :class:`tf.train.Optimizer`
+    """
+    def __init__(self, opt, name='ProxyOptimizer'):
+        assert isinstance(opt, tf.train.Optimizer), opt
+        super(ProxyOptimizer, self).__init__(False, name)
+        self._opt = opt
+
+    def compute_gradients(self, *args, **kwargs):
+        return self._opt.compute_gradients(*args, **kwargs)
+
+    def get_slot(self, *args, **kwargs):
+        return self._opt.get_slot(*args, **kwargs)
+
+    def get_slot_names(self, *args, **kwargs):
+        return self._opt.get_slot_names(*args, **kwargs)
+
+    def apply_gradients(self, *args, **kwargs):
+        return self._opt.apply_gradients(*args, **kwargs)
 
 
-def create_optimizer(loss, init_lr, num_train_steps, num_warmup_steps):
+@six.add_metaclass(ABCMeta)
+class GradientProcessor(object):
+    """
+    Base class for all gradient processors.
+    Gradient processors can be applied to optimizers by
+    :func:`optimizer.apply_grad_processors`.
+    Subclass should override the ``_process()`` method.
+    """
+    _name_scope = None
+
+    def process(self, grads):
+        """
+        Process the symbolic gradients.
+        Args:
+            grads (list): list of (grad, var).
+        Returns:
+            list: processed gradients, with the same type as input.
+        """
+
+        # reuse the old name_scope, if process() is called multiple times
+        if self._name_scope is None:
+            with tf.name_scope(type(self).__name__) as scope:
+                self._name_scope = scope
+                return self._process(grads)
+        else:
+            with tf.name_scope(self._name_scope):
+                return self._process(grads)
+
+    @abstractmethod
+    def _process(self, grads):
+        pass
+
+
+class FilterNoneGrad(GradientProcessor):
+    """
+    Skip the update and print a warning (instead of crashing),
+    when the gradient of certain variable is None.
+    """
+    def __init__(self, verbose=True):
+        """
+        Args:
+            verbose (bool): whether to print warning about None gradients.
+        """
+        super(FilterNoneGrad, self).__init__()
+        self._verbose = verbose
+
+    def _process(self, grads):
+        g = []
+        to_print = []
+        for grad, var in grads:
+            if grad is None:
+                to_print.append(var.op.name)
+            else:
+                g.append((grad, var))
+        if self._verbose and len(to_print):
+            message = ', '.join(to_print)
+            tf.logger.warn("No gradient w.r.t {} trainable variables: {}".format(len(to_print), message))
+        return g
+
+
+class AccumGradOptimizer(ProxyOptimizer):
+    """
+    An optimizer which accumulates gradients across :math:`k` :meth:`minimize` executions,
+    and apply them together in every :math:`k` th :meth:`minimize` execution.
+    This is roughly the same as using a :math:`k` times larger batch size plus a
+    :math:`k` times larger learning rate, but uses much less memory.
+    This optimizer can be used in any TensorFlow code (with or without tensorpack).
+    Example:
+    .. code-block:: python
+        from tensorpack.tfutils.optimizer import AccumGradOptimizer
+        myopt = tf.train.GradientDescentOptimizer(0.01)
+        myopt = AccumGradOptimizer(myopt, niter=5)
+        train_op = myopt.minimize(loss)
+    """
+
+    def __init__(self, opt, niter):
+        """
+        Args:
+            opt (tf.train.Optimizer): the underlying sub-optimizer.
+            niter (int): number of iterations to accumulate gradients.
+        """
+        super(AccumGradOptimizer, self).__init__(opt, 'AccumGrad')
+        self._niter = int(niter)
+
+    def _create_accum_slots(self, var_list):
+        slots = []
+        for v in var_list:
+            # TODO an option to not colocate the accumulators with variables (to save more memory)
+            s = self._zeros_slot(v, "accum", self._name)
+            slots.append(s)
+        return slots
+
+    def apply_gradients(self, grads_and_vars, global_step=None, name=None):
+        grads_and_vars = FilterNoneGrad().process(grads_and_vars)
+        vs = []
+        for g, v in grads_and_vars:
+            assert isinstance(g, (tf.Tensor, tf.IndexedSlices)) and isinstance(v, tf.Variable), \
+                "AccumGradOptimizer does not work for the gradient of {}! " \
+                "Types of v and g are {} and {}".format(v.op.name, type(v), type(g))
+            vs.append(v)
+
+        with tf.control_dependencies(None):
+            slots = self._create_accum_slots(vs)
+            slots_and_vars = [(s, gv[1]) for s, gv in zip(slots, grads_and_vars)]
+
+            with tf.variable_scope(self._name), tf.device('/cpu:0'):
+                counter = tf.Variable(
+                    0, name="counter", trainable=False, dtype=tf.int32)
+
+        with tf.name_scope('AccumGradOptimizer'):
+            ops = []
+            for s, gv in zip(slots, grads_and_vars):
+                g, v = gv
+                ops.append(s.assign_add(g))
+            update_counter = tf.assign_add(counter, 1, name='update_counter')
+            update_slot_op = tf.group(update_counter, *ops, name='update_slot')
+
+            def update_grad():
+                update_op = self._opt.apply_gradients(slots_and_vars)
+                with tf.control_dependencies([update_op]):
+                    clear_ops = [tf.assign(s, tf.zeros_like(s)) for s in slots]
+                return tf.group(*clear_ops, name='update_grad')
+
+            pred = tf.equal(tf.mod(counter, self._niter), 0)
+            with tf.control_dependencies([update_slot_op]):
+                if name is None:
+                    name = 'cond_update_grad'
+                op = tf.cond(pred, update_grad, tf.no_op)
+
+            if global_step is not None:
+                # Tensorpack maintains global_step by other means,
+                # so this option is useless in tensorpack trainers.
+                # But we include the implementation here for completeness
+                global_step_increment = tf.assign_add(global_step, 1)
+                op = tf.group(op, global_step_increment, name=name)
+            else:
+                op = tf.identity(op, name=name).op
+        return op
+
+
+def create_optimizer(loss, init_lr, num_train_steps, num_warmup_steps,
+                     niter: int = 1):
     """Creates an optimizer training op."""
     global_step = tf.train.get_or_create_global_step()
 
@@ -67,7 +231,7 @@ def create_optimizer(loss, init_lr, num_train_steps, num_warmup_steps):
         beta1=0.999,
         epsilon1=1e-6,)
     #     # exclude_from_decay=["LayerNorm", "layer_norm", "bias"])
-
+    optimizer = AccumGradOptimizer(optimizer, niter=niter)
 
     # You could do this, but instead we don't because a) it's slow and b) we already did the 'update clipping'
     # (grads, _) = tf.clip_by_global_norm(grads, clip_norm=1.0)

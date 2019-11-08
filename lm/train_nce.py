@@ -83,6 +83,8 @@ flags.DEFINE_integer("max_eval_steps", 100, "Maximum number of eval steps.")
 
 flags.DEFINE_integer("seed", 42, "Random seed.")
 
+flags.DEFINE_integer("niter", 16, "Gradient accumulation.")
+
 flags.DEFINE_bool("use_tpu", False, "Whether to use TPU or GPU/CPU.")
 
 flags.DEFINE_string(
@@ -150,7 +152,7 @@ def main(_):
                                     learning_rate=FLAGS.learning_rate,
                                     num_train_steps=FLAGS.num_train_steps,
                                     num_warmup_steps=FLAGS.num_warmup_steps,
-                                    gen_checkpoint=FLAGS.gen_checkpoint,
+                                    gen_checkpoint=FLAGS.gen_checkpoint, niter=FLAGS.niter
                                     )
 
     # If TPU is not available, this will fall back to normal Estimator on CPU

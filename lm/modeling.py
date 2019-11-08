@@ -577,7 +577,7 @@ class GroverModelResidual(object):
             input_hidden_state, residuals = self.score_seq(caches, config, do_cache, is_training, label_weights, self.input_ids,
                                                            reuse, self.batch_size)
             self.hidden_state = input_hidden_state
-            self.residuals = tf.reshape(residuals, (original_batch_size, 1))
+            self.residuals = tf.reshape(residuals, (self.batch_size, 1))
             if not ignore_noise:
                 noise_hidden_state, noise_residuals = self.score_seq(caches, config, do_cache, is_training, noise_label_weights,
                                                                      self.noises,
@@ -1019,7 +1019,7 @@ def nce_model_fn_builder(config: GroverConfig, init_checkpoint,
                          learning_rate,
                          num_train_steps, num_warmup_steps,
                          gen_checkpoint: Optional[str] = None,
-                         correction_factor: float = 1.,
+                         correction_factor: float = 1., niter
                          ):
 
     def model_fn(features, labels, mode, params):  # pylint: disable=unused-argument
@@ -1054,7 +1054,7 @@ def nce_model_fn_builder(config: GroverConfig, init_checkpoint,
             else:
                 loss_to_optimize = total_loss
             train_op, train_metrics = optimization_adafactor.create_optimizer(
-                loss_to_optimize, learning_rate, num_train_steps, num_warmup_steps)
+                loss_to_optimize, learning_rate, num_train_steps, num_warmup_steps, niter)
             tvars = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES)
         else:
             train_op = None
