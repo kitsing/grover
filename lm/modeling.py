@@ -1053,12 +1053,13 @@ def nce_model_fn_builder(config: GroverConfig, init_checkpoint,
                 loss_to_optimize = total_loss + 1e-2 * reg_loss
             else:
                 loss_to_optimize = total_loss
-            train_op, train_metrics = optimization_adafactor.create_optimizer(
+            train_op, train_metrics, acc_hook = optimization_adafactor.create_optimizer(
                 loss_to_optimize, learning_rate, num_train_steps, num_warmup_steps, niter)
             tvars = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES)
         else:
             train_op = None
             tvars = tf.trainable_variables()
+            acc_hook = None
 
         if reuse_gen:
             assert gen_checkpoint is not None
@@ -1089,7 +1090,8 @@ def nce_model_fn_builder(config: GroverConfig, init_checkpoint,
                 train_op=train_op,
                 training_hooks=[
                     tf.train.LoggingTensorHook({'mean total loss': tf.metrics.mean(total_loss)[1],
-                                                'mean reg loss': tf.metrics.mean(reg_loss)[1]}, every_n_iter=100)],
+                                                'mean reg loss': tf.metrics.mean(reg_loss)[1]}, every_n_iter=100),
+                    acc_hook],
                 )
 
         elif mode == tf.estimator.ModeKeys.EVAL:
