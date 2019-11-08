@@ -139,9 +139,9 @@ class AccumGradOptimizer(ProxyOptimizer):
         grads_and_vars = FilterNoneGrad().process(grads_and_vars)
         vs = []
         for g, v in grads_and_vars:
-            assert isinstance(g, (tf.Tensor, tf.IndexedSlices)) and isinstance(v, tf.Variable), \
-                "AccumGradOptimizer does not work for the gradient of {}! " \
-                "Types of v and g are {} and {}".format(v.op.name, type(v), type(g))
+            # assert isinstance(g, (tf.Tensor, tf.IndexedSlices)) and isinstance(v, tf.Variable), \
+            #     "AccumGradOptimizer does not work for the gradient of {}! " \
+            #     "Types of v and g are {} and {}".format(v.op.name, type(v), type(g))
             vs.append(v)
 
         with tf.control_dependencies(None):
