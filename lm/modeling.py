@@ -661,10 +661,15 @@ class GroverModelResidual(object):
                                         )
             residuals = tf.reduce_sum(residuals, axis=1)
         else:
-            hidden_state = hidden_state * label_weights[:, None]
-            hid_state_restored = tf.reshape(hidden_state, [original_batch_size, self.seq_length, -1])
-            residuals = tf.reduce_sum(hid_state_restored,
-                                           axis=(1, 2))
+            logits_flat = tf.matmul(hidden_state, embedding_table, transpose_b=True)
+            to_score_flat = tf.reshape(to_score, (-1,))
+            one_hot_labels = tf.one_hot(to_score_flat,
+                                        depth=self.config.vocab_size,
+                                        dtype=logits_flat.dtype)
+            logprobs_flat = tf.nn.log_softmax(logits_flat, axis=-1)
+            selected_and_masked = label_weights * tf.reduce_sum(logprobs_flat * one_hot_labels, axis=[-1])
+            residuals = tf.reduce_sum(tf.reshape(selected_and_masked, (-1, self.seq_length)), axis=[-1])
+
         return hidden_state, residuals
 
     def reg_g_loss(self):
@@ -815,7 +820,7 @@ class GroverModel(object):
         logits_flat = self.logits_flat - tf.cast(ignore_ids[None], tf.float32) * 1e10
         logprobs_flat = tf.nn.log_softmax(logits_flat, axis=-1)
         selected_and_masked = label_weights * tf.reduce_sum(logprobs_flat * one_hot_labels, axis=[-1])
-        per_seq_sum = tf.reduce_sum(tf.reshape(selected_and_masked, (-1, 1024)), axis=[-1])
+        per_seq_sum = tf.reduce_sum(tf.reshape(selected_and_masked, (-1, self.seq_length)), axis=[-1])
         return per_seq_sum
 
     def lm_loss(self):
@@ -1171,7 +1176,7 @@ def eval_seq(news_config: GroverConfig, tokens, correction_factor = 1., baseline
             noises=None,
             pad_token_id=news_config.pad_token_id,
             ignore_noise=True,
-            scope='dis'
+            scope='dis', ignore_ids=ignore_ids
         )
         residuals = residual_model.residuals[:, 0]
         unnormalized_p = residuals + correction_factor * lm_score
