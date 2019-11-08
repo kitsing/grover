@@ -312,7 +312,7 @@ def create_optimizer(loss, init_lr, num_train_steps, num_warmup_steps,
                     counter += 1
             return tf.group([s.assign(tf.zeros_like(s)) for s in sum_gradient])
 
-        do_update = tf.get_variable('do_update', dtype=tf.int32, shape=(), aggregation=tf.VariableAggregation.MEAN)
+        do_update = tf.get_variable('do_update', dtype=tf.float32, shape=(), aggregation=tf.VariableAggregation.MEAN)
         accumulation_hook = GradientAccumulationHook(variable=do_update, frequency=gradient_accmulation_multiplier,)
 
         with tf.control_dependencies([train_op]):
