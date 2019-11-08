@@ -26,7 +26,7 @@ OUTPUT_DIR=${1} # put your output directory here
 input_dev_file='/checkpoint/kitsing/grover/cloze/preprocessed_val0[0-5]*.tfrecord.npz'
 
 # Make sure batch size scales.
-let batch_size=170
+let batch_size=160
 
 # NODE_LIST=$( scontrol show hostname ${SLURM_JOB_NODELIST} | sed -z 's/\n/\:8,/g' )
 # NODE_LIST=${NODE_LIST%?}
@@ -44,5 +44,6 @@ RUN_STRING="python lm/eval_nce.py \
 --files ${input_dev_file} \
 --output-path ${OUTPUT_DIR} \
 --num-gpus 8 --baseline"
+echo "${RUN_STRING}"
 srun --label ${RUN_STRING}
 set +o noglob

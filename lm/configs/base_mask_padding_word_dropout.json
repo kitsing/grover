@@ -9,6 +9,6 @@
   "max_position_embeddings": 1024,
   "num_attention_heads": 12,
   "num_hidden_layers": 12,
-  "mask_padding": false,
+  "mask_padding": true,
   "word_dropout_prob": 0.1
 }

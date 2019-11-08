@@ -9,7 +9,7 @@ export PYTHONPATH=$(pwd)
 learning_rate=1.25e-5
 max_seq_length=1024
 save_checkpoint_steps=1000
-K=8
+K=6
 
 # You can customize the training here
 # mega, medium, or base

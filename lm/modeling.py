@@ -675,7 +675,7 @@ class GroverModelResidual(object):
     def reg_g_loss(self):
         noises = self.noise_residuals
         log_sum_exp = tf.reduce_logsumexp(noises, axis=1)
-        diff = log_sum_exp - tf.log(noises.shape[1])
+        diff = log_sum_exp - tf.log(tf.cast(noises.shape[1], tf.float32))
         return tf.reduce_mean(diff * diff, axis=0)
 
     def total_loss(self):
