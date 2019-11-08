@@ -254,7 +254,7 @@ def create_optimizer(loss, init_lr, num_train_steps, num_warmup_steps,
         beta1=0.999,
         epsilon1=1e-6,)
     #     # exclude_from_decay=["LayerNorm", "layer_norm", "bias"])
-    optimizer = AccumGradOptimizer(optimizer)
+    optimizer = AccumGradOptimizer(optimizer, niter=niter)
     # compute batch gradient
     accumulation_hook = None
     if False:
