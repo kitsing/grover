@@ -1019,7 +1019,7 @@ def nce_model_fn_builder(config: GroverConfig, init_checkpoint,
                          learning_rate,
                          num_train_steps, num_warmup_steps,
                          gen_checkpoint: Optional[str] = None,
-                         correction_factor: float = 1., niter
+                         correction_factor: float = 1., niter = 1,
                          ):
 
     def model_fn(features, labels, mode, params):  # pylint: disable=unused-argument
