@@ -293,6 +293,34 @@ def residual_mlp_layer(x_flat, intermediate_size, initializer_range=0.02, hidden
     return layer_output
 
 
+def residual_mlp_no_ln_layer(x_flat, intermediate_size, initializer_range=0.02, hidden_dropout_prob=0.1):
+    """
+    :param x: The attention output. It should be [batch_size*seq_length, dim]
+    :param intermediate_size: the hidden projection. By default this is the input_dim * 4.
+
+    in the original GPT we would return layer_norm(x_norm + h1) rather than layer_norm(x + h1)
+
+    :return:
+    """
+    batch_size_seq_length, hidden_size = get_shape_list(x_flat, expected_rank=2)
+
+    intermediate_output = tf.layers.dense(
+        x_flat,
+        intermediate_size,
+        activation=gelu,
+        kernel_initializer=create_initializer(initializer_range),
+        name='intermediate',
+    )
+
+    output_for_residual = tf.layers.dense(
+        intermediate_output,
+        hidden_size,
+        name='output',
+        kernel_initializer=create_initializer(initializer_range))
+    output_for_residual = dropout(output_for_residual, hidden_dropout_prob)
+    return output_for_residual
+
+
 def embed(input_ids,
           vocab_size,
           embedding_size,
@@ -575,8 +603,8 @@ class GroverModelResidual(object):
             mask = get_attention_mask(self.seq_length, self.seq_length + self.cache_length, dtype=embeddings.dtype)
         else:
             # we don't really need masking
-            mask = get_inverted_mask(self.seq_length, self.seq_length + self.cache_length, dtype=embeddings.dtype)
-            # mask = tf.ones((self.seq_length, self.seq_length + self.cache_length), dtype=embeddings.dtype)
+            # mask = get_inverted_mask(self.seq_length, self.seq_length + self.cache_length, dtype=embeddings.dtype)
+            mask = tf.ones((self.seq_length, self.seq_length + self.cache_length), dtype=embeddings.dtype)
         # We keep the representation as a 2D tensor to avoid re-shaping it back and
         # forth from a 3D tensor to a 2D tensor. Re-shapes are normally free on
         # the GPU/CPU but may not be free on the TPU, so we want to minimize them to
@@ -602,9 +630,9 @@ class GroverModelResidual(object):
                 new_kvs.append(new_kv)
 
                 # [batch_size * seq_length, hidden_size]
-                hidden_state = residual_mlp_layer(hidden_state + attention_output,
-                                                  intermediate_size=config.intermediate_size,
-                                                  hidden_dropout_prob=self.config.hidden_dropout_prob)
+                hidden_state = residual_mlp_no_ln_layer(hidden_state + attention_output,
+                                                        intermediate_size=config.intermediate_size,
+                                                        hidden_dropout_prob=self.config.hidden_dropout_prob)
         if self.config.reuse_gen:
             raise NotImplementedError
             # have to stop gradient here as we don't want to finetune the generator (or do we?)
