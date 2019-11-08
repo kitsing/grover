@@ -270,7 +270,7 @@ def create_optimizer(loss, init_lr, num_train_steps, num_warmup_steps,
         sum_gradient = [tf.get_variable(name="sum_grads" + str(i), shape=tv.shape,
                                         initializer=tf.zeros_initializer,
                                         trainable=False,
-                                        dtype=tf.float32, aggregation=tf.VariableAggregation.NONE,
+                                        dtype=tf.float32, aggregation=tf.VariableAggregation.MEAN,
                                         collections=[tf.GraphKeys.LOCAL_VARIABLES]) for i, tv in enumerate(tvars)]
         sum_ops = []
         unused_variable_in_batch = []
