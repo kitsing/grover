@@ -257,7 +257,7 @@ def create_optimizer(loss, init_lr, num_train_steps, num_warmup_steps,
     # optimizer = AccumGradOptimizer(optimizer, niter=niter)
     # compute batch gradient
     accumulation_hook = None
-    if True:
+    if False:
         tvars = tf.trainable_variables()
         grads = tf.gradients(loss, tvars)
         (grads, _) = tf.clip_by_global_norm(grads, clip_norm=1.0)
@@ -341,7 +341,7 @@ def create_optimizer(loss, init_lr, num_train_steps, num_warmup_steps,
 
         # new_global_step = global_step + 1
         # train_op = tf.group(train_op, [global_step.assign(new_global_step)])
-    # train_op = optimizer.minimize(loss, global_step=tf.train.get_global_step(),)
+    train_op = optimizer.minimize(loss, global_step=tf.train.get_global_step(), iter_size=niter)
 
     train_metrics = {
         'learning_rate': learning_rate,
