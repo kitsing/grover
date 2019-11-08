@@ -172,7 +172,8 @@ class AccumGradOptimizer(ProxyOptimizer):
 
             with tf.variable_scope(self._name), tf.device('/cpu:0'):
                 counter = tf.Variable(
-                    0, name="counter", trainable=False, dtype=tf.int32)
+                    0, name="counter", trainable=False, dtype=tf.int32,
+                    aggregation=tf.VariableAggregation.MEAN)
 
         with tf.name_scope('AccumGradOptimizer'):
             ops = []
@@ -253,91 +254,94 @@ def create_optimizer(loss, init_lr, num_train_steps, num_warmup_steps,
         beta1=0.999,
         epsilon1=1e-6,)
     #     # exclude_from_decay=["LayerNorm", "layer_norm", "bias"])
-
+    optimizer = AccumGradOptimizer(optimizer)
     # compute batch gradient
-    tvars = tf.trainable_variables()
-    grads = tf.gradients(loss, tvars)
-    (grads, _) = tf.clip_by_global_norm(grads, clip_norm=1.0)
-    # this is a list of sum(dy/dx) for each variable that must be paired with a tvars list.
-    # element may be an IndexedSlices object that does not support assignning, e.g. [g.assign(value) for g in grads]
-    # some of the elements are None, meaning y and x does not depend on each other.
-    # Nonetypes must be handled using Python, tensorflow cannot convert Nonetypes to 0.
+    accumulation_hook = None
+    if False:
+        tvars = tf.trainable_variables()
+        grads = tf.gradients(loss, tvars)
+        (grads, _) = tf.clip_by_global_norm(grads, clip_norm=1.0)
+        # this is a list of sum(dy/dx) for each variable that must be paired with a tvars list.
+        # element may be an IndexedSlices object that does not support assignning, e.g. [g.assign(value) for g in grads]
+        # some of the elements are None, meaning y and x does not depend on each other.
+        # Nonetypes must be handled using Python, tensorflow cannot convert Nonetypes to 0.
 
-    # declare a temp variable for summation
-    sum_gradient = [tf.get_variable(name="sum_grads" + str(i), shape=tv.shape,
-                                    initializer=tf.zeros_initializer,
-                                    trainable=False,
-                                    dtype=tf.float32,
-                                    collections=[tf.GraphKeys.LOCAL_VARIABLES]) for i, tv in enumerate(tvars)]
-    sum_ops = []
-    unused_variable_in_batch = []
+        # declare a temp variable for summation
+        sum_gradient = [tf.get_variable(name="sum_grads" + str(i), shape=tv.shape,
+                                        initializer=tf.zeros_initializer,
+                                        trainable=False,
+                                        dtype=tf.float32, aggregation=tf.VariableAggregation.NONE,
+                                        collections=[tf.GraphKeys.LOCAL_VARIABLES]) for i, tv in enumerate(tvars)]
+        sum_ops = []
+        unused_variable_in_batch = []
 
-    # gradient accumulation
-    for i, gv in enumerate(grads):
-        if gv is not None:
-            sum_ops.append(sum_gradient[i].assign_add(gv, name="accumulate_gradient"))
-        else:
-            unused_variable_in_batch.append(sum_gradient[i])
-            sum_gradient[i] = None
+        # gradient accumulation
+        for i, gv in enumerate(grads):
+            if gv is not None:
+                sum_ops.append(sum_gradient[i].assign_add(gv, name="accumulate_gradient"))
+            else:
+                unused_variable_in_batch.append(sum_gradient[i])
+                sum_gradient[i] = None
 
-    # NOTE : calling .assign_add does NOTHING in estimator, must wrap them all and handle them via train_ops
+        # NOTE : calling .assign_add does NOTHING in estimator, must wrap them all and handle them via train_ops
 
-    gradient_accmulation_multiplier = niter
+        gradient_accmulation_multiplier = niter
 
-    def apply_accumulated_gradients(sums):
-        # normalize gradient
-        normalize_ops = []
-        for i, g in enumerate(sums):
-            if g is not None:
-                normalize_ops.append(sums[i].assign(tf.multiply(g, 1 / gradient_accmulation_multiplier)))
-                # assign to make sure it still is a variable, or else it will become a Tensor
-        with tf.control_dependencies(normalize_ops):
-            minimize_op = optimizer.apply_gradients(zip(sums, tvars), global_step=global_step)
-        return tf.group(minimize_op, *normalize_ops, name="apply_accumulated_gradients")
+        def apply_accumulated_gradients(sums):
+            # normalize gradient
+            normalize_ops = []
+            for i, g in enumerate(sums):
+                if g is not None:
+                    normalize_ops.append(sums[i].assign(tf.multiply(g, 1 / gradient_accmulation_multiplier)))
+                    # assign to make sure it still is a variable, or else it will become a Tensor
+            with tf.control_dependencies(normalize_ops):
+                minimize_op = optimizer.apply_gradients(zip(sums, tvars), global_step=global_step)
+            return tf.group(minimize_op, *normalize_ops, name="apply_accumulated_gradients")
 
-    train_op = tf.cond(tf.math.equal(global_step % gradient_accmulation_multiplier, 0),
-                       lambda: apply_accumulated_gradients(sum_gradient),
-                       lambda: optimizer.apply_gradients(zip([None for _ in grads], tvars), global_step=global_step))
+        train_op = tf.cond(tf.math.equal(global_step % gradient_accmulation_multiplier, 0),
+                           lambda: apply_accumulated_gradients(sum_gradient),
+                           lambda: optimizer.apply_gradients(zip([None for _ in grads], tvars), global_step=global_step))
 
-    # reset accumulation when necessary
-    def reset():
-        counter = 0
-        for i, s in enumerate(sum_gradient):
-            if s is None:
-                # restore reference from None to the original variable
-                sum_gradient[i] = unused_variable_in_batch[counter]
-                counter += 1
-        return tf.group([s.assign(tf.zeros_like(s)) for s in sum_gradient])
+        # reset accumulation when necessary
+        def reset():
+            counter = 0
+            for i, s in enumerate(sum_gradient):
+                if s is None:
+                    # restore reference from None to the original variable
+                    sum_gradient[i] = unused_variable_in_batch[counter]
+                    counter += 1
+            return tf.group([s.assign(tf.zeros_like(s)) for s in sum_gradient])
 
-    do_update = tf.get_variable('do_update', dtype=tf.int32)
-    accumulation_hook = GradientAccumulationHook(variable=do_update, frequency=gradient_accmulation_multiplier,)
+        do_update = tf.get_variable('do_update', dtype=tf.int32)
+        accumulation_hook = GradientAccumulationHook(variable=do_update, frequency=gradient_accmulation_multiplier,)
 
-    with tf.control_dependencies([train_op]):
-        reset_ops = tf.cond(tf.math.equal(do_update, 1.),
-                            reset,
-                            tf.no_op)
-    # the 2 branches must have identical structure, [op1, op2, ...] || no_op cannot be valid cond branch.
-    # tf.group to convert all resets into 1 op and match with no_op: tf.group() || np_op
+        with tf.control_dependencies([train_op]):
+            reset_ops = tf.cond(tf.math.equal(do_update, 1.),
+                                reset,
+                                tf.no_op)
+        # the 2 branches must have identical structure, [op1, op2, ...] || no_op cannot be valid cond branch.
+        # tf.group to convert all resets into 1 op and match with no_op: tf.group() || np_op
 
-    # Increment global step
-    new_global_step = global_step + 1
-    train_op = tf.group(*sum_ops, [train_op, global_step.assign(new_global_step), reset_ops])
+        # Increment global step
+        new_global_step = global_step + 1
+        train_op = tf.group(*sum_ops, [train_op, global_step.assign(new_global_step), reset_ops])
 
-    logging_hook = tf.train.LoggingTensorHook({"accuracy": "acc"},
-                                              every_n_iter=gradient_accmulation_multiplier)
+        logging_hook = tf.train.LoggingTensorHook({"accuracy": "acc"},
+                                                  every_n_iter=gradient_accmulation_multiplier)
 
 
-    # You could do this, but instead we don't because a) it's slow and b) we already did the 'update clipping'
-    # (grads, _) = tf.clip_by_global_norm(grads, clip_norm=1.0)
+        # You could do this, but instead we don't because a) it's slow and b) we already did the 'update clipping'
+        # (grads, _) = tf.clip_by_global_norm(grads, clip_norm=1.0)
 
-    # train_op = optimizer.minimize(loss, global_step=tf.train.get_global_step(),)
+        # train_op = optimizer.minimize(loss, global_step=tf.train.get_global_step(),)
 
-    # Normally the global step update is done inside of `apply_gradients`.
-    # However, `AdaFactorOptimizer` doesn't do this. But if you use
-    # a different optimizer, you should probably take this line out.
+        # Normally the global step update is done inside of `apply_gradients`.
+        # However, `AdaFactorOptimizer` doesn't do this. But if you use
+        # a different optimizer, you should probably take this line out.
 
-    # new_global_step = global_step + 1
-    # train_op = tf.group(train_op, [global_step.assign(new_global_step)])
+        # new_global_step = global_step + 1
+        # train_op = tf.group(train_op, [global_step.assign(new_global_step)])
+    train_op = optimizer.minimize(loss, global_step=tf.train.get_global_step(),)
 
     train_metrics = {
         'learning_rate': learning_rate,
