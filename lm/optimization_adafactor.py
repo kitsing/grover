@@ -300,7 +300,7 @@ def create_optimizer(loss, init_lr, num_train_steps, num_warmup_steps,
 
         train_op = tf.cond(tf.math.equal(global_step % gradient_accmulation_multiplier, 0),
                            lambda: apply_accumulated_gradients(sum_gradient),
-                           lambda: optimizer.apply_gradients(zip([None for _ in grads], tvars), global_step=global_step))
+                           lambda: tf.group([optimizer.apply_gradients(zip([None for _ in grads], tvars), global_step=global_step)], name='no_op'))
 
         # reset accumulation when necessary
         def reset():

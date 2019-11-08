@@ -630,9 +630,9 @@ class GroverModelResidual(object):
                 new_kvs.append(new_kv)
 
                 # [batch_size * seq_length, hidden_size]
-                hidden_state = residual_mlp_no_ln_layer(hidden_state + attention_output,
-                                                        intermediate_size=config.intermediate_size,
-                                                        hidden_dropout_prob=self.config.hidden_dropout_prob)
+                hidden_state = residual_mlp_layer(hidden_state + attention_output,
+                                                  intermediate_size=config.intermediate_size,
+                                                  hidden_dropout_prob=self.config.hidden_dropout_prob)
         if self.config.reuse_gen:
             raise NotImplementedError
             # have to stop gradient here as we don't want to finetune the generator (or do we?)
