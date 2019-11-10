@@ -492,7 +492,7 @@ class GroverModelResidual(object):
                  pad_token_id=0,
                  scope=None,
                  reuse=False, alpha: float = 1.,
-                 ignore_noise: bool = False):
+                 ignore_noise: bool = False, ignore_ids = None):
         """
         :param config:
         :param is_training:
