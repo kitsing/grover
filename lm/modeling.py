@@ -1100,7 +1100,7 @@ def nce_model_fn_builder(config: GroverConfig, init_checkpoint,
                                                 'noise residuals':
                                                     tf.reduce_mean(residual_model.noise_residuals, axis=0)
                                                 }, every_n_iter=100),
-                    acc_hook],
+                    ],
                 )
 
         elif mode == tf.estimator.ModeKeys.EVAL:
