@@ -46,6 +46,7 @@ class GroverConfig(object):
                  additional_transformer_layers: int = 4,
                  truncate_right: bool = False,
                  regularize_g: bool = False,
+                 hyper_normalize: bool = False,
                  scope_prefix='newslm'):
         """Constructs NewsConfig.
 
@@ -88,6 +89,7 @@ class GroverConfig(object):
         self.additional_transformer_layers = additional_transformer_layers
         self.truncate_right = truncate_right
         self.regularize_g = regularize_g
+        self.hyper_normalize = hyper_normalize
 
     @classmethod
     def from_dict(cls, json_object):
@@ -697,7 +699,10 @@ class GroverModelResidual(object):
             one_hot_labels = tf.one_hot(to_score_flat,
                                         depth=self.config.vocab_size,
                                         dtype=logits_flat.dtype)
-            logprobs_flat = tf.nn.log_softmax(logits_flat, axis=-1)
+            if self.config.hyper_normalize:
+                logprobs_flat = tf.nn.log_softmax(logits_flat, axis=-1)
+            else:
+                logprobs_flat = logits_flat
             selected_and_masked = label_weights * tf.reduce_sum(logprobs_flat * one_hot_labels, axis=[-1])
             residuals = tf.reduce_sum(tf.reshape(selected_and_masked, (-1, self.seq_length)), axis=[-1])
 
@@ -1090,7 +1095,11 @@ def nce_model_fn_builder(config: GroverConfig, init_checkpoint,
                 train_op=train_op,
                 training_hooks=[
                     tf.train.LoggingTensorHook({'mean total loss': tf.metrics.mean(total_loss)[1],
-                                                'mean reg loss': tf.metrics.mean(reg_loss)[1]}, every_n_iter=100),
+                                                'mean reg loss': tf.metrics.mean(reg_loss)[1],
+                                                'residuals': tf.reduce_mean(residual_model.residuals, axis=0),
+                                                'noise residuals':
+                                                    tf.reduce_mean(residual_model.noise_residuals, axis=0)
+                                                }, every_n_iter=100),
                     acc_hook],
                 )
 
