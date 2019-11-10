@@ -47,6 +47,7 @@ class GroverConfig(object):
                  truncate_right: bool = False,
                  regularize_g: bool = False,
                  hyper_normalize: bool = False,
+                 sum_up_units: bool = False,
                  scope_prefix='newslm'):
         """Constructs NewsConfig.
 
@@ -90,6 +91,7 @@ class GroverConfig(object):
         self.truncate_right = truncate_right
         self.regularize_g = regularize_g
         self.hyper_normalize = hyper_normalize
+        self.sum_up_units = sum_up_units
 
     @classmethod
     def from_dict(cls, json_object):
@@ -591,7 +593,7 @@ class GroverModelResidual(object):
         # output_bias = tf.get_variable('output_bias', shape=[config.vocab_size], initializer=tf.zeros_initializer())
         # self.logits_flat = tf.nn.bias_add(self.logits_flat, output_bias)
 
-    def score_seq(self, caches, config, do_cache, is_training, label_weights, to_score,
+    def score_seq(self, caches, config: GroverConfig, do_cache, is_training, label_weights, to_score,
                   reuse, original_batch_size):
         with tf.variable_scope("embeddings"):
             embeddings, embedding_table = embed(to_score, config.vocab_size,
@@ -600,7 +602,7 @@ class GroverModelResidual(object):
                                                 initializer_range=config.initializer_range,
                                                 max_position_embeddings=config.max_position_embeddings,
                                                 use_one_hot_embeddings=True)
-        if self.config.reuse_gen:
+        if config.reuse_gen:
             # reusing the original model for embeddings. to ensure correctness we make use of the original masks
             mask = get_attention_mask(self.seq_length, self.seq_length + self.cache_length, dtype=embeddings.dtype)
         else:
@@ -611,7 +613,7 @@ class GroverModelResidual(object):
         # forth from a 3D tensor to a 2D tensor. Re-shapes are normally free on
         # the GPU/CPU but may not be free on the TPU, so we want to minimize them to
         # help the optimizer.
-        hidden_state = tf.reshape(embeddings, [original_batch_size * self.seq_length, self.config.hidden_size])
+        hidden_state = tf.reshape(embeddings, [original_batch_size * self.seq_length, config.hidden_size])
         new_kvs = []
         for layer_idx, layer_cache in enumerate(caches):
             with tf.variable_scope('layer{:02d}'.format(layer_idx)):
@@ -624,8 +626,8 @@ class GroverModelResidual(object):
                     size_per_head=config.hidden_size // config.num_attention_heads,
                     num_attention_heads=config.num_attention_heads,
                     initializer_range=config.initializer_range,
-                    hidden_dropout_prob=self.config.hidden_dropout_prob,
-                    attention_probs_dropout_prob=self.config.attention_probs_dropout_prob,
+                    hidden_dropout_prob=config.hidden_dropout_prob,
+                    attention_probs_dropout_prob=config.attention_probs_dropout_prob,
                     do_cache=do_cache,
                     cache=layer_cache,
                 )
@@ -634,13 +636,13 @@ class GroverModelResidual(object):
                 # [batch_size * seq_length, hidden_size]
                 hidden_state = residual_mlp_layer(hidden_state + attention_output,
                                                   intermediate_size=config.intermediate_size,
-                                                  hidden_dropout_prob=self.config.hidden_dropout_prob)
+                                                  hidden_dropout_prob=config.hidden_dropout_prob)
         if self.config.reuse_gen:
             raise NotImplementedError
             # have to stop gradient here as we don't want to finetune the generator (or do we?)
             hidden_state = tf.stop_gradient(hidden_state) * label_weights[:, None]
             # start some additional layers
-            if self.config.additional_transformer_layers > 0:
+            if config.additional_transformer_layers > 0:
                 with tf.variable_scope("additional_embeddings"):
                     add_embeddings, \
                     add_embedding_table = embed(to_score, config.vocab_size,
@@ -649,13 +651,13 @@ class GroverModelResidual(object):
                                                 initializer_range=config.initializer_range,
                                                 max_position_embeddings=config.max_position_embeddings,
                                                 use_one_hot_embeddings=True)
-                emb_shape = [original_batch_size * self.seq_length, self.config.hidden_size]
+                emb_shape = [original_batch_size * self.seq_length, config.hidden_size]
                 additional_emb = tf.reshape(add_embeddings, emb_shape)
                 hidden_state = tf.concat((hidden_state, additional_emb), axis=1)
                 # we are no longer subject to the left-context limitation so we have a full mask here
                 full_mask = tf.ones((self.seq_length, self.seq_length + self.cache_length), dtype=embeddings.dtype)
 
-                for additional_layer_idx in range(self.config.additional_transformer_layers):
+                for additional_layer_idx in range(config.additional_transformer_layers):
                     with tf.variable_scope('additional_layer{:02d}'.format(additional_layer_idx)):
                         # [batch_size * seq_length, hidden_size]
                         attention_output, new_kv = attention_layer(
@@ -666,8 +668,8 @@ class GroverModelResidual(object):
                             size_per_head=config.hidden_size * 2 // config.num_attention_heads,
                             num_attention_heads=config.num_attention_heads,
                             initializer_range=config.initializer_range,
-                            hidden_dropout_prob=self.config.hidden_dropout_prob,
-                            attention_probs_dropout_prob=self.config.attention_probs_dropout_prob,
+                            hidden_dropout_prob=config.hidden_dropout_prob,
+                            attention_probs_dropout_prob=config.attention_probs_dropout_prob,
                             do_cache=do_cache,
                             cache=layer_cache,
                         )
@@ -676,11 +678,11 @@ class GroverModelResidual(object):
                         # [batch_size * seq_length, hidden_size]
                         hidden_state = residual_mlp_layer(hidden_state + attention_output,
                                                           intermediate_size=config.intermediate_size,
-                                                          hidden_dropout_prob=self.config.hidden_dropout_prob)
+                                                          hidden_dropout_prob=config.hidden_dropout_prob)
                 hidden_state = tf.layers.dense(tf.layers.dropout(hidden_state,
-                                                                 rate=self.config.hidden_dropout_prob,
+                                                                 rate=config.hidden_dropout_prob,
                                                                  training=is_training),
-                                               self.config.hidden_size, name='additional_final_layer',
+                                               config.hidden_size, name='additional_final_layer',
                                                )
                 hidden_state = layer_norm(hidden_state, name='layer_normed_final_layer')
         if config.final_projection_layer:
@@ -694,17 +696,25 @@ class GroverModelResidual(object):
                                         )
             residuals = tf.reduce_sum(residuals, axis=1)
         else:
-            logits_flat = tf.matmul(hidden_state, embedding_table, transpose_b=True)
-            to_score_flat = tf.reshape(to_score, (-1,))
-            one_hot_labels = tf.one_hot(to_score_flat,
-                                        depth=self.config.vocab_size,
-                                        dtype=logits_flat.dtype)
-            if self.config.hyper_normalize:
-                logprobs_flat = tf.nn.log_softmax(logits_flat, axis=-1)
+            if config.sum_up_units:
+                logits_flat = hidden_state
+                if config.hyper_normalize:
+                    logits_flat = tf.nn.log_softmax(logits_flat, axis=-1)
+                logits_flat = logits_flat *label_weights[:, None]
+                residuals = tf.reduce_sum(tf.reshape(logits_flat, (original_batch_size, self.seq_length, -1)),
+                                          axis=[1,2])
             else:
-                logprobs_flat = logits_flat
-            selected_and_masked = label_weights * tf.reduce_sum(logprobs_flat * one_hot_labels, axis=[-1])
-            residuals = tf.reduce_sum(tf.reshape(selected_and_masked, (-1, self.seq_length)), axis=[-1])
+                logits_flat = tf.matmul(hidden_state, embedding_table, transpose_b=True)
+                to_score_flat = tf.reshape(to_score, (-1,))
+                one_hot_labels = tf.one_hot(to_score_flat,
+                                            depth=config.vocab_size,
+                                            dtype=logits_flat.dtype)
+                if config.hyper_normalize:
+                    logprobs_flat = tf.nn.log_softmax(logits_flat, axis=-1)
+                else:
+                    logprobs_flat = logits_flat
+                selected_and_masked = label_weights * tf.reduce_sum(logprobs_flat * one_hot_labels, axis=[-1])
+                residuals = tf.reduce_sum(tf.reshape(selected_and_masked, (-1, self.seq_length)), axis=[-1])
 
         return hidden_state, residuals
 
