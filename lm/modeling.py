@@ -697,7 +697,8 @@ class GroverModelResidual(object):
             one_hot_labels = tf.one_hot(to_score_flat,
                                         depth=self.config.vocab_size,
                                         dtype=logits_flat.dtype)
-            logprobs_flat = tf.nn.log_softmax(logits_flat, axis=-1)
+            # logprobs_flat = tf.nn.log_softmax(logits_flat, axis=-1)
+            logprobs_flat = logits_flat
             selected_and_masked = label_weights * tf.reduce_sum(logprobs_flat * one_hot_labels, axis=[-1])
             residuals = tf.reduce_sum(tf.reshape(selected_and_masked, (-1, self.seq_length)), axis=[-1])
 
@@ -1091,7 +1092,7 @@ def nce_model_fn_builder(config: GroverConfig, init_checkpoint,
                 training_hooks=[
                     tf.train.LoggingTensorHook({'mean total loss': tf.metrics.mean(total_loss)[1],
                                                 'mean reg loss': tf.metrics.mean(reg_loss)[1]}, every_n_iter=100),
-                    acc_hook],
+                    ],
                 )
 
         elif mode == tf.estimator.ModeKeys.EVAL:
