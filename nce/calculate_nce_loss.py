@@ -52,7 +52,7 @@ parser.add_argument(
     help='How many things to generate per context. will split into chunks if need be',
 )
 parser.add_argument('--num-noise-chunks', default=1, type=int)
-parser.add_argument('--file', default='input.npz', type=str)
+parser.add_argument('--files', default='input.npz', type=str)
 parser.add_argument('--seed', default=42, type=int)
 parser.add_argument('--correction-factor', default=1., type=float) # correction factor: 14136832/13628509
 parser.add_argument('--seq-length', default=1025, type=int)
@@ -63,6 +63,12 @@ parser.add_argument('--fixed-sample-size', default=64, type=int)
 args = parser.parse_args()
 args.fold = int(environ['SLURM_PROCID'])
 args.num_folds = int(environ['SLURM_NTASKS'])
+from glob import glob
+
+all_files = list(glob(args.files))[:]
+
+args.num_files_per_node = int(ceil(len(all_files) / args.num_folds))
+args.our_files = all_files[args.fold * args.num_files_per_node: (args.fold+1) * args.num_files_per_node]
 
 # for training we are keeping the seed the same across all runs
 seed = args.seed
@@ -214,9 +220,10 @@ with tf.Session(config=tf_config, graph=tf.Graph()) as sess:
         noise_prob_chunks.append(noise_prob_masked)
     noise_tokens = np.concatenate(noise_token_chunks, axis=0)
     n_probs = np.concatenate(noise_prob_chunks, axis=0)
-    assert noise_tokens.shape[0] > args.fixed_sample_size, noise_tokens.shape
-    noise_tokens = noise_tokens[:args.fixed_sample_size]
-    n_probs = n_probs[:args.fixed_sample_size]
+    if args.fixed_sample_size > 0:
+        assert noise_tokens.shape[0] > args.fixed_sample_size, noise_tokens.shape
+        noise_tokens = noise_tokens[:args.fixed_sample_size]
+        n_probs = n_probs[:args.fixed_sample_size]
     # evaluate the noise samples under our model
     noise_probs_under_model = get_seq_probs(seqs=noise_tokens,
                                             batch_size=args.batch_size * args.num_gpus,
@@ -225,51 +232,60 @@ with tf.Session(config=tf_config, graph=tf.Graph()) as sess:
                                             tf_outputs=merged_probs,
                                             ignore_ids_np=ignore_ids_np,
                                             ignore_ids=ignore_ids)
-    noise_probs_sanity_check = get_seq_probs(seqs=noise_tokens,
-                                             batch_size=args.batch_size * args.num_gpus,
-                                             token_place_holders=all_tokens,
-                                             num_gpus=args.num_gpus,
-                                             tf_outputs=merged_noise_probs,
-                                             ignore_ids_np=ignore_ids_np,
-                                             ignore_ids=ignore_ids)
-    diff = noise_probs_sanity_check - n_probs
-    print(f'sanity check: {np.sum(diff*diff)} {diff}')
+    do_sanity_check = False
+    if do_sanity_check:
+        noise_probs_sanity_check = get_seq_probs(seqs=noise_tokens,
+                                                 batch_size=args.batch_size * args.num_gpus,
+                                                 token_place_holders=all_tokens,
+                                                 num_gpus=args.num_gpus,
+                                                 tf_outputs=merged_noise_probs,
+                                                 ignore_ids_np=ignore_ids_np,
+                                                 ignore_ids=ignore_ids)
+        diff = noise_probs_sanity_check - n_probs
+        print(f'sanity check: {np.sum(diff*diff)} {diff}')
     assert noise_probs_under_model.shape == n_probs.shape
-
-    s_bar_noise = logsumexp(np.reshape(noise_probs_under_model, (-1,)) - np.reshape(n_probs, (-1,)), keepdims=True).reshape((-1,))
-    print(f's_bar_noise: {s_bar_noise} # of noise samples: {n_probs.shape}')
+    noise_output_fname = f'{args.output_path}/noises/{args.fold}.output.npz'
+    np.savez(noise_output_fname, noise_probs_under_model=np.reshape(noise_probs_under_model, (-1,)),
+             noise_probs_under_noise=np.reshape(n_probs, (-1,)))
+    # s_bar_noise = logsumexp(np.reshape(noise_probs_under_model, (-1,)) - np.reshape(n_probs, (-1,)), keepdims=True).reshape((-1,))
+    # print(f's_bar_noise: {s_bar_noise} # of noise samples: {n_probs.shape}')
 
     # evaluate input tensors under both noise and our model
     from math import ceil
     from os.path import exists
-    output_fname = f'{args.output_path}/{basename(args.file)}.out.npz'
-    if exists(f'{output_fname}'):
-        tf.logging.info(f'{output_fname} already exists. skipping...')
-        exit(0)
-    with np.load(args.file) as loaded_numpy:
-        all_seqs = loaded_numpy['tokens']
-        input_probs_under_model = get_seq_probs(seqs=all_seqs,
-                                                batch_size=args.batch_size * args.num_gpus,
-                                                token_place_holders=all_tokens,
-                                                num_gpus=args.num_gpus, tf_outputs=merged_probs,
-                                                ignore_ids=ignore_ids,
-                                                ignore_ids_np=ignore_ids_np)
 
-        input_probs_under_noise = get_seq_probs(seqs=all_seqs,
-                                                batch_size=args.batch_size * args.num_gpus,
-                                                token_place_holders=all_tokens,
-                                                num_gpus=args.num_gpus, tf_outputs=merged_noise_probs,
-                                                ignore_ids=ignore_ids,
-                                                ignore_ids_np=ignore_ids_np)
+    for file in args.our_files:
+        output_fname = f'{args.output_path}/{basename(file)}.out.npz'
+        if exists(f'{output_fname}'):
+            tf.logging.info(f'{output_fname} already exists. skipping...')
+            continue
+        with np.load(file) as loaded_numpy:
+            all_seqs = loaded_numpy['tokens']
+            input_probs_under_model = get_seq_probs(seqs=all_seqs,
+                                                    batch_size=args.batch_size * args.num_gpus,
+                                                    token_place_holders=all_tokens,
+                                                    num_gpus=args.num_gpus, tf_outputs=merged_probs,
+                                                    ignore_ids=ignore_ids,
+                                                    ignore_ids_np=ignore_ids_np)
 
-        s_bar_real = input_probs_under_model - input_probs_under_noise
-        print(f's_bar_real: {s_bar_real}')
-        s_bar_noise_expanded = np.tile(s_bar_noise.reshape(-1, 1), (s_bar_real.shape[0], 1))
-        concatenated = np.concatenate((s_bar_real.reshape(-1, 1), s_bar_noise_expanded), axis=1)
-        classification_z = logsumexp(concatenated, axis=1)
-        loss = -(s_bar_real - classification_z)
-        output_fname = f'{args.output_path}/{basename(output_fname)}.loss.npz'
-        baseline_results=np.log(float(n_probs.shape[0]) + 1.)
-        results = np.mean(loss)
-        print(f'results: {results} baseline results: {baseline_results} loss: {loss}')
-        np.savez(output_fname, loss=loss, num_noises=n_probs.shape[0])
+            input_probs_under_noise = get_seq_probs(seqs=all_seqs,
+                                                    batch_size=args.batch_size * args.num_gpus,
+                                                    token_place_holders=all_tokens,
+                                                    num_gpus=args.num_gpus, tf_outputs=merged_noise_probs,
+                                                    ignore_ids=ignore_ids,
+                                                    ignore_ids_np=ignore_ids_np)
+            # s_bar_real = input_probs_under_model - input_probs_under_noise
+            # print(f's_bar_real: {s_bar_real}')
+            # s_bar_noise_expanded = np.tile(s_bar_noise.reshape(-1, 1), (s_bar_real.shape[0], 1))
+            # concatenated = np.concatenate((s_bar_real.reshape(-1, 1), s_bar_noise_expanded), axis=1)
+            # classification_z = logsumexp(concatenated, axis=1)
+            # loss = -(s_bar_real - classification_z)
+            output_fname = f'{args.output_path}/{basename(output_fname)}.loss.npz'
+            # baseline_results=np.log(float(n_probs.shape[0]) + 1.)
+            # results = np.mean(loss)
+            # print(f'results: {results} baseline results: {baseline_results} loss: {loss}')
+            # np.savez(output_fname, loss=loss, num_noises=n_probs.shape[0], baseline_results=baseline_results,
+            #          input_probs_under_model=input_probs_under_model, input_probs_under_noise=input_probs_under_noise
+            #          )
+            np.savez(output_fname, input_probs_under_model=input_probs_under_model,
+                     input_probs_under_noise=input_probs_under_noise)

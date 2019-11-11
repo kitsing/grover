@@ -36,7 +36,7 @@ export TF_XLA_FLAGS="--tf_xla_auto_jit=2"
 export XLA_FLAGS="--xla_gpu_cuda_data_dir=${CUDA_HOME}"
 
 set -o noglob
-RUN_STRING="python lm/eval_nce.py \
+RUN_STRING="python lm/eval_cloze.py \
 --model-config-fn lm/configs/${model_type}.json \
 --gen-model-ckpt /checkpoint/kitsing/grover-models/${model_type}/model.ckpt \
 --dis-model-ckpt /checkpoint/kitsing/grover-models/${model_type}/model.ckpt \
