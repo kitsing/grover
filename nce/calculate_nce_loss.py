@@ -107,7 +107,8 @@ def restore(scope, checkpoint):
 
         splitted_name = name.split(scope)
         if len(splitted_name) > 1:
-            new_name = ''.join(['newslm'] + splitted_name[1:])
+            # new_name = ''.join(['newslm'] + splitted_name[1:])
+            new_name = 'newslm'.join(splitted_name)
             if new_name in unused_vars_in_checkpoint:
                 assignment_map[new_name] = var
                 tf.logging.info(f'key found: {new_name} -> {name}')
