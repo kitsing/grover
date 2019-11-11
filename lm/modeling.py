@@ -508,6 +508,8 @@ class GroverModelResidual(object):
         :param pad_token_id: Which token will be used for padding (probably 0.)
         :param scope: scope to run this on
         """
+        from tensorflow.distributions import Bernoulli
+
         self.config = copy.deepcopy(config)
         self.is_training = is_training
         self.pad_token_id = pad_token_id
@@ -517,84 +519,71 @@ class GroverModelResidual(object):
         if not is_training:
             self.config.hidden_dropout_prob = 0.0
             self.config.attention_probs_dropout_prob = 0.0
+            self.config.word_dropout_prob = 0.
 
         # autoencoder-like architecture
         original_batch_size = input_ids.shape[0]
 
-        if self.config.truncate_right:
-            input_ids = input_ids[:, -1]
+        if is_training:
+            num_or_denom = Bernoulli(probs=0.5, dtype=tf.bool)
+            sampled_num_or_denom = num_or_denom.sample()
         else:
-            input_ids = input_ids[:, 1:]
+            sampled_num_or_denom = tf.constant(True, shape=())
 
-        self.input_ids = input_ids
-        self.batch_size, self.seq_length = get_shape_list(self.input_ids, 2)
-
-        if not ignore_noise:
-            self.k = noises.shape[1]
+        def truncate(inp):
             if self.config.truncate_right:
-                noises = noises[:, :, -1]
+                return inp[:, -1]
             else:
-                noises = noises[:, :, 1:]
-            self.noises = tf.reshape(noises, (-1, noises.shape[2]))
-            self.noise_batch_size, _ = get_shape_list(self.noises, 2)
-        else:
-            self.k = 0
+                return inp[:, 1:]
 
-        if is_training and self.config.word_dropout_prob > 0.:
-            from tensorflow.distributions import Bernoulli
-            b = Bernoulli(probs=(1 - self.config.word_dropout_prob), dtype=tf.bool)
-            word_dropout_mask = b.sample(sample_shape=(self.batch_size, self.seq_length))
-            self.input_ids = tf.where(word_dropout_mask,
-                                      self.input_ids,
-                                      tf.fill(
-                                          (self.batch_size, self.seq_length),
-                                          self.pad_token_id)
-                                      )
-            if not ignore_noise:
-                noise_dropout_mask = b.sample(sample_shape=(self.noise_batch_size, self.seq_length))
-                self.noises = tf.where(noise_dropout_mask,
-                                       self.noises,
-                                       tf.fill(
-                                           (self.noise_batch_size, self.seq_length),
-                                           self.pad_token_id)
-                                       )
+        def get_denom_loss():
+            scored = get_loss(tf.concat((input_ids[0][None, :], noises), axis=0))
+            return tf.reduce_logsumexp(scored, dim=0)
 
-        if self.config.mask_padding:
-            label_weights = tf.cast(tf.not_equal(tf.reshape(self.input_ids, [-1]),
-                                                 self.pad_token_id),
-                                    dtype=tf.float32)
-            if not ignore_noise:
-                noise_label_weights = tf.cast(tf.not_equal(tf.reshape(self.noises, [-1]),
-                                                 self.pad_token_id),
-                                              dtype=tf.float32)
-        else:
-            label_weights = tf.reshape(tf.ones_like(self.input_ids, dtype=tf.float32), (-1,))
-            if not ignore_noise:
-                noise_label_weights = tf.reshape(tf.ones_like(self.noises, dtype=tf.float32), (-1,))
+        def get_num_loss():
+            scored = get_loss(input_ids)
+            return - tf.reduce_mean(scored, dim=0)
 
-        assert config.max_position_embeddings >= self.seq_length
-        caches = [None] * config.num_hidden_layers
-        self.cache_length = 0
+        def get_loss(inp):
+            to_score = truncate(inp)
+            batch_size, seq_length = get_shape_list(to_score, 2)
+            if is_training and self.config.word_dropout_prob > 0.:
+                b = Bernoulli(probs=(1 - self.config.word_dropout_prob), dtype=tf.bool)
+                word_dropout_mask = b.sample(sample_shape=(batch_size, seq_length))
+                self.input_ids = tf.where(word_dropout_mask,
+                                          inp,
+                                          tf.fill(
+                                              (batch_size, seq_length),
+                                              self.pad_token_id)
+                                          )
+            if self.config.mask_padding:
+                label_weights = tf.cast(tf.not_equal(tf.reshape(inp, [-1]),
+                                                     self.pad_token_id),
+                                        dtype=tf.float32)
+            else:
+                label_weights = tf.reshape(tf.ones_like(self.input_ids, dtype=tf.float32), (-1,))
+            assert self.config.max_position_embeddings >= seq_length
+            caches = [None] * self.config.num_hidden_layers
+            self.cache_length = 0
+
+            with tf.variable_scope(default_name='newslm', reuse=reuse,
+                                   name_or_scope=scope):
+                residuals = self.score_seq(caches, config, do_cache, is_training, label_weights, inp,
+                                           reuse, batch_size, seq_length)
+                return tf.reshape(residuals, (batch_size,))
 
         with tf.variable_scope(default_name='newslm', reuse=reuse,
                                name_or_scope=scope):
-            input_hidden_state, residuals = self.score_seq(caches, config, do_cache, is_training, label_weights, self.input_ids,
-                                                           reuse, self.batch_size)
-            self.hidden_state = input_hidden_state
-            self.residuals = tf.reshape(residuals, (self.batch_size, 1))
-            if not ignore_noise:
-                noise_hidden_state, noise_residuals = self.score_seq(caches, config, do_cache, is_training, noise_label_weights,
-                                                                     self.noises,
-                                                                     reuse, self.noise_batch_size)
-                self.noise_hidden_state = tf.reshape(noise_hidden_state, (self.batch_size, self.k, -1))
-                self.noise_residuals = tf.reshape(noise_residuals, (self.batch_size, self.k))
+            loss = tf.cond(sampled_num_or_denom, get_num_loss, get_denom_loss)
+            self.loss = loss
+            self.sampled_num_or_denom = sampled_num_or_denom
 
         # THE OUTPUT BIAS DOES NOT SPARK JOY
         # output_bias = tf.get_variable('output_bias', shape=[config.vocab_size], initializer=tf.zeros_initializer())
         # self.logits_flat = tf.nn.bias_add(self.logits_flat, output_bias)
 
     def score_seq(self, caches, config: GroverConfig, do_cache, is_training, label_weights, to_score,
-                  reuse, original_batch_size):
+                  reuse, original_batch_size, seq_length):
         with tf.variable_scope("embeddings"):
             embeddings, embedding_table = embed(to_score, config.vocab_size,
                                                 config.hidden_size,
@@ -604,16 +593,16 @@ class GroverModelResidual(object):
                                                 use_one_hot_embeddings=True)
         if config.reuse_gen:
             # reusing the original model for embeddings. to ensure correctness we make use of the original masks
-            mask = get_attention_mask(self.seq_length, self.seq_length + self.cache_length, dtype=embeddings.dtype)
+            mask = get_attention_mask(seq_length, seq_length + self.cache_length, dtype=embeddings.dtype)
         else:
             # we don't really need masking
             # mask = get_inverted_mask(self.seq_length, self.seq_length + self.cache_length, dtype=embeddings.dtype)
-            mask = tf.ones((self.seq_length, self.seq_length + self.cache_length), dtype=embeddings.dtype)
+            mask = tf.ones((seq_length, seq_length + self.cache_length), dtype=embeddings.dtype)
         # We keep the representation as a 2D tensor to avoid re-shaping it back and
         # forth from a 3D tensor to a 2D tensor. Re-shapes are normally free on
         # the GPU/CPU but may not be free on the TPU, so we want to minimize them to
         # help the optimizer.
-        hidden_state = tf.reshape(embeddings, [original_batch_size * self.seq_length, config.hidden_size])
+        hidden_state = tf.reshape(embeddings, [original_batch_size * seq_length, config.hidden_size])
         new_kvs = []
         for layer_idx, layer_cache in enumerate(caches):
             with tf.variable_scope('layer{:02d}'.format(layer_idx)):
@@ -622,7 +611,7 @@ class GroverModelResidual(object):
                     hidden_state,
                     mask,
                     batch_size=original_batch_size,
-                    seq_length=self.seq_length,
+                    seq_length=seq_length,
                     size_per_head=config.hidden_size // config.num_attention_heads,
                     num_attention_heads=config.num_attention_heads,
                     initializer_range=config.initializer_range,
@@ -700,8 +689,8 @@ class GroverModelResidual(object):
                 logits_flat = hidden_state
                 if config.hyper_normalize:
                     logits_flat = tf.nn.log_softmax(logits_flat, axis=-1)
-                logits_flat = logits_flat *label_weights[:, None]
-                residuals = tf.reduce_sum(tf.reshape(logits_flat, (original_batch_size, self.seq_length, -1)),
+                logits_flat = logits_flat * label_weights[:, None]
+                residuals = tf.reduce_sum(tf.reshape(logits_flat, (original_batch_size, seq_length, -1)),
                                           axis=[1,2])
             else:
                 logits_flat = tf.matmul(hidden_state, embedding_table, transpose_b=True)
@@ -714,9 +703,9 @@ class GroverModelResidual(object):
                 else:
                     logprobs_flat = logits_flat
                 selected_and_masked = label_weights * tf.reduce_sum(logprobs_flat * one_hot_labels, axis=[-1])
-                residuals = tf.reduce_sum(tf.reshape(selected_and_masked, (-1, self.seq_length)), axis=[-1])
+                residuals = tf.reduce_sum(tf.reshape(selected_and_masked, (-1, seq_length)), axis=[-1])
 
-        return hidden_state, residuals
+        return residuals
 
     def reg_g_loss(self):
         noises = self.noise_residuals
@@ -726,10 +715,7 @@ class GroverModelResidual(object):
 
     def total_loss(self):
         if self.alpha == 1.:
-            full_z = tf.concat((self.residuals, self.noise_residuals), axis=1)
-            return - tf.reduce_mean(tf.nn.log_softmax(full_z, axis=1)[:, 0])
-            # total_loss = - (self.residuals[:, 0] - tf.reduce_logsumexp(full_z, axis=1))
-            # return tf.reduce_mean(total_loss, axis=0)
+            return self.loss
         else:
             # TODO implement this!
             raise NotImplementedError
@@ -1105,10 +1091,7 @@ def nce_model_fn_builder(config: GroverConfig, init_checkpoint,
                 train_op=train_op,
                 training_hooks=[
                     tf.train.LoggingTensorHook({'mean total loss': tf.metrics.mean(total_loss)[1],
-                                                'mean reg loss': tf.metrics.mean(reg_loss)[1],
-                                                'residuals': tf.reduce_mean(residual_model.residuals, axis=0),
-                                                'noise residuals':
-                                                    tf.reduce_mean(residual_model.noise_residuals, axis=0)
+                                                'training_num': residual_model.sampled_num_or_denom
                                                 }, every_n_iter=100),
                     ],
                 )
