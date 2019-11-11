@@ -551,13 +551,13 @@ class GroverModelResidual(object):
                 b = Bernoulli(probs=(1 - self.config.word_dropout_prob), dtype=tf.bool)
                 word_dropout_mask = b.sample(sample_shape=(batch_size, seq_length))
                 self.input_ids = tf.where(word_dropout_mask,
-                                          inp,
+                                          to_score,
                                           tf.fill(
                                               (batch_size, seq_length),
                                               self.pad_token_id)
                                           )
             if self.config.mask_padding:
-                label_weights = tf.cast(tf.not_equal(tf.reshape(inp, [-1]),
+                label_weights = tf.cast(tf.not_equal(tf.reshape(to_score, [-1]),
                                                      self.pad_token_id),
                                         dtype=tf.float32)
             else:
@@ -568,7 +568,7 @@ class GroverModelResidual(object):
 
             with tf.variable_scope(default_name='newslm', reuse=reuse,
                                    name_or_scope=scope):
-                residuals = self.score_seq(caches, config, do_cache, is_training, label_weights, inp,
+                residuals = self.score_seq(caches, config, do_cache, is_training, label_weights, to_score,
                                            reuse, batch_size, seq_length)
                 return tf.reshape(residuals, (batch_size,))
 
