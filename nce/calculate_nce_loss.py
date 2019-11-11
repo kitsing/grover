@@ -57,6 +57,7 @@ parser.add_argument('--seed', default=42, type=int)
 parser.add_argument('--correction-factor', default=1., type=float) # correction factor: 14136832/13628509
 parser.add_argument('--seq-length', default=1025, type=int)
 parser.add_argument('--output-path', default='./', type=str)
+parser.add_argument('--noise-output-path', default='./', type=str)
 parser.add_argument('--num-gpus', default=8, type=int)
 parser.add_argument('--fixed-sample-size', default=-1, type=int)
 
@@ -245,7 +246,7 @@ with tf.Session(config=tf_config, graph=tf.Graph()) as sess:
         diff = noise_probs_sanity_check - n_probs
         print(f'sanity check: {np.sum(diff*diff)} {diff}')
     assert noise_probs_under_model.shape == n_probs.shape
-    noise_output_fname = f'{args.output_path}/noises/{args.fold}.output.npz'
+    noise_output_fname = f'{args.noise_output_path}/{args.fold}.output.npz'
     np.savez(noise_output_fname, noise_probs_under_model=np.reshape(noise_probs_under_model, (-1,)),
              noise_probs_under_noise=np.reshape(n_probs, (-1,)))
     # s_bar_noise = logsumexp(np.reshape(noise_probs_under_model, (-1,)) - np.reshape(n_probs, (-1,)), keepdims=True).reshape((-1,))
