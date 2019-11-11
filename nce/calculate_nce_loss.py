@@ -58,7 +58,7 @@ parser.add_argument('--correction-factor', default=1., type=float) # correction 
 parser.add_argument('--seq-length', default=1025, type=int)
 parser.add_argument('--output-path', default='./', type=str)
 parser.add_argument('--num-gpus', default=8, type=int)
-parser.add_argument('--fixed-sample-size', default=64, type=int)
+parser.add_argument('--fixed-sample-size', default=-1, type=int)
 
 args = parser.parse_args()
 args.fold = int(environ['SLURM_PROCID'])
