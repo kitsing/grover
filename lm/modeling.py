@@ -524,12 +524,6 @@ class GroverModelResidual(object):
         # autoencoder-like architecture
         original_batch_size = input_ids.shape[0]
 
-        if is_training:
-            num_or_denom = Bernoulli(probs=0.5, dtype=tf.bool)
-            sampled_num_or_denom = num_or_denom.sample()
-        else:
-            sampled_num_or_denom = tf.constant(True, shape=())
-
         def truncate(inp):
             if self.config.truncate_right:
                 return inp[:, -1]
@@ -542,7 +536,7 @@ class GroverModelResidual(object):
 
         def get_num_loss():
             scored = get_loss(input_ids)
-            return - tf.reduce_mean(scored, axis=0)
+            return - tf.reduce_mean(scored, axis=0), scored
 
         def get_loss(inp):
             to_score = truncate(inp)
@@ -574,10 +568,12 @@ class GroverModelResidual(object):
 
         with tf.variable_scope(default_name='newslm', reuse=reuse,
                                name_or_scope=scope):
-            loss = get_num_loss() + get_denom_loss()
-            # loss = tf.cond(sampled_num_or_denom, get_num_loss, get_denom_loss)
-            self.loss = loss
-            self.sampled_num_or_denom = sampled_num_or_denom
+            num_loss, residuals = get_num_loss()
+            if not ignore_noise:
+                loss = num_loss() + get_denom_loss()
+                # loss = tf.cond(sampled_num_or_denom, get_num_loss, get_denom_loss)
+                self.loss = loss
+            self.residuals = residuals
 
         # THE OUTPUT BIAS DOES NOT SPARK JOY
         # output_bias = tf.get_variable('output_bias', shape=[config.vocab_size], initializer=tf.zeros_initializer())
@@ -1092,7 +1088,6 @@ def nce_model_fn_builder(config: GroverConfig, init_checkpoint,
                 train_op=train_op,
                 training_hooks=[
                     tf.train.LoggingTensorHook({'mean total loss': tf.metrics.mean(total_loss)[1],
-                                                'training_num': residual_model.sampled_num_or_denom
                                                 }, every_n_iter=100),
                     ],
                 )
@@ -1215,7 +1210,7 @@ def eval_seq(news_config: GroverConfig, tokens, correction_factor = 1., baseline
             ignore_noise=True,
             scope='dis', ignore_ids=ignore_ids
         )
-        residuals = residual_model.residuals[:, 0]
+        residuals = residual_model.residuals
         unnormalized_p = residuals + correction_factor * lm_score
         return unnormalized_p
 
