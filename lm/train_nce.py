@@ -119,6 +119,8 @@ flags.DEFINE_integer(
 def main(_):
     from random import seed as rnd_seed
     rnd_seed(FLAGS.seed)
+    tf.set_random_seed(FLAGS.seed)
+
     import os
     rank = int(os.environ['SLURM_PROCID'])
     local_rank = int(os.environ['SLURM_LOCALID'])

@@ -537,12 +537,12 @@ class GroverModelResidual(object):
                 return inp[:, 1:]
 
         def get_denom_loss():
-            scored = get_loss(tf.concat((input_ids[0][None, :], noises), axis=0))
-            return tf.reduce_logsumexp(scored, dim=0)
+            scored = get_loss(tf.concat((input_ids[0][None, :], noises[1:, 0, :]), axis=0))
+            return tf.reduce_logsumexp(scored, axis=0)
 
         def get_num_loss():
             scored = get_loss(input_ids)
-            return - tf.reduce_mean(scored, dim=0)
+            return - tf.reduce_mean(scored, axis=0)
 
         def get_loss(inp):
             to_score = truncate(inp)
@@ -574,7 +574,8 @@ class GroverModelResidual(object):
 
         with tf.variable_scope(default_name='newslm', reuse=reuse,
                                name_or_scope=scope):
-            loss = tf.cond(sampled_num_or_denom, get_num_loss, get_denom_loss)
+            loss = get_num_loss() + get_denom_loss()
+            # loss = tf.cond(sampled_num_or_denom, get_num_loss, get_denom_loss)
             self.loss = loss
             self.sampled_num_or_denom = sampled_num_or_denom
 
