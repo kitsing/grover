@@ -256,7 +256,7 @@ with tf.Session(config=tf_config, graph=tf.Graph()) as sess:
     from os.path import exists
 
     for file in args.our_files:
-        output_fname = f'{args.output_path}/{basename(file)}.out.npz'
+        output_fname = f'{args.output_path}/{basename(output_fname)}.loss.npz'
         if exists(f'{output_fname}'):
             tf.logging.info(f'{output_fname} already exists. skipping...')
             continue
@@ -275,18 +275,6 @@ with tf.Session(config=tf_config, graph=tf.Graph()) as sess:
                                                     num_gpus=args.num_gpus, tf_outputs=merged_noise_probs,
                                                     ignore_ids=ignore_ids,
                                                     ignore_ids_np=ignore_ids_np)
-            # s_bar_real = input_probs_under_model - input_probs_under_noise
-            # print(f's_bar_real: {s_bar_real}')
-            # s_bar_noise_expanded = np.tile(s_bar_noise.reshape(-1, 1), (s_bar_real.shape[0], 1))
-            # concatenated = np.concatenate((s_bar_real.reshape(-1, 1), s_bar_noise_expanded), axis=1)
-            # classification_z = logsumexp(concatenated, axis=1)
-            # loss = -(s_bar_real - classification_z)
-            output_fname = f'{args.output_path}/{basename(output_fname)}.loss.npz'
-            # baseline_results=np.log(float(n_probs.shape[0]) + 1.)
-            # results = np.mean(loss)
-            # print(f'results: {results} baseline results: {baseline_results} loss: {loss}')
-            # np.savez(output_fname, loss=loss, num_noises=n_probs.shape[0], baseline_results=baseline_results,
-            #          input_probs_under_model=input_probs_under_model, input_probs_under_noise=input_probs_under_noise
-            #          )
+
             np.savez(output_fname, input_probs_under_model=input_probs_under_model,
                      input_probs_under_noise=input_probs_under_noise)
