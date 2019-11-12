@@ -4,9 +4,6 @@ import numpy as np
 import tensorflow as tf
 from tqdm import tqdm
 
-from nce.calculate_nce_loss import args
-
-
 def restore(scope, checkpoint, sess):
     vars = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope=scope)
     checkpoint_vars = tf.train.list_variables(checkpoint)
