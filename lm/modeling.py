@@ -48,6 +48,7 @@ class GroverConfig(object):
                  regularize_g: bool = False,
                  hyper_normalize: bool = False,
                  sum_up_units: bool = False,
+                 coupled: bool = False,
                  scope_prefix='newslm'):
         """Constructs NewsConfig.
 
@@ -92,6 +93,7 @@ class GroverConfig(object):
         self.regularize_g = regularize_g
         self.hyper_normalize = hyper_normalize
         self.sum_up_units = sum_up_units
+        self.coupled = coupled
 
     @classmethod
     def from_dict(cls, json_object):
@@ -521,9 +523,6 @@ class GroverModelResidual(object):
             self.config.attention_probs_dropout_prob = 0.0
             self.config.word_dropout_prob = 0.
 
-        # autoencoder-like architecture
-        original_batch_size = input_ids.shape[0]
-
         def truncate(inp):
             if self.config.truncate_right:
                 return inp[:, -1]
@@ -531,8 +530,16 @@ class GroverModelResidual(object):
                 return inp[:, 1:]
 
         def get_denom_loss():
-            scored = get_loss(tf.concat((input_ids[0][None, :], noises[1:, 0, :]), axis=0))
-            return tf.reduce_logsumexp(scored, axis=0)
+            if self.config.coupled:
+                to_score = tf.concat((input_ids[:, None, :], noises), axis=1)
+                batch_size, k_plus_one, seq_length = get_shape_list(to_score, 3)
+                to_score_reshaped = tf.reshape(to_score, (batch_size * k_plus_one, seq_length))
+                scored = get_loss(to_score_reshaped)
+                z = tf.reduce_logsumexp(tf.reshape(scored, (batch_size, k_plus_one)), axis=1)
+                return tf.reduce_mean(z, axis=0)
+            else:
+                scored = get_loss(tf.concat((input_ids[0][None, :], noises[1:, 0, :]), axis=0))
+                return tf.reduce_logsumexp(scored, axis=0)
 
         def get_num_loss():
             scored = get_loss(input_ids)
