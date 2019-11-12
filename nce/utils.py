@@ -1,4 +1,10 @@
+from math import ceil
+
+import numpy as np
 import tensorflow as tf
+from tqdm import tqdm
+
+from nce.calculate_nce_loss import args
 
 
 def restore(scope, checkpoint, sess):
@@ -37,3 +43,23 @@ def restore(scope, checkpoint, sess):
     # print(gen_assignment_map)
     saver = tf.train.Saver(var_list=assignment_map)
     saver.restore(sess, checkpoint)
+
+
+def get_seq_probs(seqs, batch_size, token_place_holders, num_gpus, tf_outputs, ignore_ids, ignore_ids_np, sess, seq_length):
+    outputs = []
+    num_batches = int(ceil(seqs.shape[0] / batch_size))
+    for batch in tqdm(range(num_batches), disable=None):
+        this_batch: np.ndarray = seqs[batch_size * batch: batch_size * (batch + 1)]
+        feed_dict = {ignore_ids: ignore_ids_np}
+        # pad to fill all GPUs
+        if this_batch.shape[0] < batch_size:
+            to_append = np.zeros((batch_size - this_batch.shape[0],
+                                  seq_length), dtype=this_batch.dtype)
+            this_batch = np.concatenate((this_batch, to_append), axis=0)
+        splitted_batch = np.split(this_batch, num_gpus)
+        for tok, b in zip(token_place_holders, splitted_batch):
+            feed_dict[tok] = b
+        probs_out = sess.run([tf_outputs],
+                             feed_dict=feed_dict)
+        outputs.append(probs_out)
+    return np.concatenate(outputs, axis=0).reshape((-1,))[:seqs.shape[0]]

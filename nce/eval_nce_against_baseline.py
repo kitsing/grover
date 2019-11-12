@@ -28,8 +28,8 @@ def get_all_noises(noise_files):
 def compute_prob_under_model(inp, noise_model_config, model_config, batch_size_per_chunk, num_gpus, seq_length,
                              gen_ckpt, dis_ckpt):
     from sample.encoder import get_encoder
-    from lm.modeling import GroverConfig, sample
-    from nce.calculate_nce_loss import eval_seq, get_seq_probs
+    from lm.modeling import GroverConfig, eval_seq
+    from nce.utils import get_seq_probs
     from nce.utils import restore
     encoder = get_encoder()
     news_config = GroverConfig.from_json_file(model_config)
@@ -65,14 +65,14 @@ def compute_prob_under_model(inp, noise_model_config, model_config, batch_size_p
                                           num_gpus=num_gpus,
                                           tf_outputs=merged_probs,
                                           ignore_ids_np=ignore_ids_np,
-                                          ignore_ids=ignore_ids)
+                                          ignore_ids=ignore_ids, sess=sess, seq_length=seq_length)
         return probs_under_model
 
 
 def main():
     import argparse
     parser = argparse.ArgumentParser()
-    parser.add_argument('--inp')
+    parser.add_argument('--inp', default='.')
     parser.add_argument('--noises')
     parser.add_argument('--noise-model-config', default='/private/home/kitsing/git/grover/lm/configs/base.json')
     parser.add_argument('--model-config', default='/private/home/kitsing/git/grover/lm/configs/base.json')

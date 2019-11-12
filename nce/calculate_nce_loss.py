@@ -3,7 +3,7 @@ import numpy as np
 import sys
 import argparse
 
-from nce.utils import restore
+from nce.utils import restore, get_seq_probs
 
 sys.path.append('../')
 from lm.modeling import GroverConfig, eval_seq, sample
@@ -87,27 +87,6 @@ print('end: {}'.format(encoder.__dict__['end_article']))
 tf_config = tf.ConfigProto(allow_soft_placement=True)
 
 context_formatted = [encoder.__dict__['begin_article'], ]
-
-
-def get_seq_probs(seqs, batch_size, token_place_holders, num_gpus, tf_outputs, ignore_ids, ignore_ids_np):
-    outputs = []
-    num_batches = int(ceil(seqs.shape[0] / batch_size))
-    for batch in tqdm(range(num_batches), disable=None):
-        this_batch: np.ndarray = seqs[batch_size * batch: batch_size * (batch + 1)]
-        feed_dict = {ignore_ids: ignore_ids_np}
-        # pad to fill all GPUs
-        if this_batch.shape[0] < batch_size:
-            to_append = np.zeros((batch_size - this_batch.shape[0],
-                                  args.seq_length), dtype=this_batch.dtype)
-            this_batch = np.concatenate((this_batch, to_append), axis=0)
-        splitted_batch = np.split(this_batch, num_gpus)
-        for tok, b in zip(token_place_holders, splitted_batch):
-            feed_dict[tok] = b
-        probs_out = sess.run([tf_outputs],
-                             feed_dict=feed_dict)
-        outputs.append(probs_out)
-    return np.concatenate(outputs, axis=0).reshape((-1,))[:seqs.shape[0]]
-
 
 with tf.Session(config=tf_config, graph=tf.Graph()) as sess:
     batch_size_per_chunk = args.batch_size
@@ -194,7 +173,8 @@ with tf.Session(config=tf_config, graph=tf.Graph()) as sess:
                                             num_gpus=args.num_gpus,
                                             tf_outputs=merged_probs,
                                             ignore_ids_np=ignore_ids_np,
-                                            ignore_ids=ignore_ids)
+                                            ignore_ids=ignore_ids, sess=sess,
+                                            seq_length=args.seq_length)
     do_sanity_check = False
     if do_sanity_check:
         noise_probs_sanity_check = get_seq_probs(seqs=noise_tokens,
@@ -203,7 +183,7 @@ with tf.Session(config=tf_config, graph=tf.Graph()) as sess:
                                                  num_gpus=args.num_gpus,
                                                  tf_outputs=merged_noise_probs,
                                                  ignore_ids_np=ignore_ids_np,
-                                                 ignore_ids=ignore_ids)
+                                                 ignore_ids=ignore_ids, sess=sess, seq_length=args.seq_length)
         diff = noise_probs_sanity_check - n_probs
         print(f'sanity check: {np.sum(diff*diff)} {diff}')
     assert noise_probs_under_model.shape == n_probs.shape
@@ -214,7 +194,6 @@ with tf.Session(config=tf_config, graph=tf.Graph()) as sess:
     # print(f's_bar_noise: {s_bar_noise} # of noise samples: {n_probs.shape}')
 
     # evaluate input tensors under both noise and our model
-    from math import ceil
     from os.path import exists
 
     for file in args.our_files:
@@ -229,14 +208,14 @@ with tf.Session(config=tf_config, graph=tf.Graph()) as sess:
                                                     token_place_holders=all_tokens,
                                                     num_gpus=args.num_gpus, tf_outputs=merged_probs,
                                                     ignore_ids=ignore_ids,
-                                                    ignore_ids_np=ignore_ids_np)
+                                                    ignore_ids_np=ignore_ids_np, sess=sess, seq_length=args.seq_length)
 
             input_probs_under_noise = get_seq_probs(seqs=all_seqs,
                                                     batch_size=args.batch_size * args.num_gpus,
                                                     token_place_holders=all_tokens,
                                                     num_gpus=args.num_gpus, tf_outputs=merged_noise_probs,
                                                     ignore_ids=ignore_ids,
-                                                    ignore_ids_np=ignore_ids_np)
+                                                    ignore_ids_np=ignore_ids_np, sess=sess, seq_length=args.seq_length)
 
             np.savez(output_fname, input_probs_under_model=input_probs_under_model,
                      input_probs_under_noise=input_probs_under_noise)
