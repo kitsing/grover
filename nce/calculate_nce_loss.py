@@ -173,7 +173,7 @@ with tf.Session(config=tf_config, graph=tf.Graph()) as sess:
             tokens = tf.placeholder(tf.int32, [batch_size_per_chunk, args.seq_length])
             all_tokens.append(tokens)
             probs = tf.stop_gradient(eval_seq(news_config, tokens, args.correction_factor, baseline=False,
-                                              ignore_ids=ignore_ids))
+                                              ignore_ids=ignore_ids, gen_config=noise_news_config))
             all_probs.append(probs)
 
             noise_probs = tf.stop_gradient(eval_seq(noise_news_config,

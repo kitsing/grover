@@ -22,6 +22,13 @@ parser.add_argument(
     help='Configuration JSON for the model',
 )
 parser.add_argument(
+    '--noise-model-config-fn',
+    dest='noise_model_config_fn',
+    default='../lm/configs/base.json',
+    type=str,
+    help='Configuration JSON for the model',
+)
+parser.add_argument(
     '--gen-model-ckpt',
     default='../models/base/model.ckpt',
     type=str,
@@ -67,6 +74,7 @@ our_files = files_to_open[args.fold * files_chunk:(args.fold + 1) * files_chunk]
 
 encoder = get_encoder()
 news_config = GroverConfig.from_json_file(args.model_config_fn)
+noise_news_config = GroverConfig.from_json_file(args.noise_model_config_fn)
 
 print('start: {}'.format(encoder.__dict__['begin_article']))
 print('end: {}'.format(encoder.__dict__['end_article']))
@@ -123,7 +131,7 @@ with tf.Session(config=tf_config, graph=tf.Graph()) as sess:
             tokens = tf.placeholder(tf.int32, [args.batch_size // args.num_gpus, args.seq_length])
             all_tokens.append(tokens)
             probs = eval_seq(news_config, tokens, args.correction_factor, baseline=args.baseline, ignore_ids=ignore_ids,
-                             )
+                             gen_config=noise_news_config)
             all_probs.append(probs)
 
     with tf.device('/cpu:0'):
