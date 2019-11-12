@@ -88,6 +88,63 @@ tf_config = tf.ConfigProto(allow_soft_placement=True)
 
 context_formatted = [encoder.__dict__['begin_article'], ]
 
+
+def output_noise():
+    noise_token_chunks = []
+    noise_prob_chunks = []
+    for chunk in tqdm(range(args.num_noise_chunks), disable=None):
+        noise_token_chunk, noise_prob_chunk = sess.run([merged_sampled_tokens, merged_sampled_probs],
+                                                       feed_dict={
+                                                           initial_context: [context_formatted] * batch_size_per_chunk,
+                                                           eos_token: encoder.__dict__['end_article'],
+                                                           ignore_ids: ignore_ids_np,
+                                                           p_for_topp: np.ones((batch_size_per_chunk,),
+                                                                               dtype=np.float32)}
+                                                       )
+        eos_positions = np.argmax(noise_token_chunk == encoder.__dict__['end_article'], axis=1)
+        valid_seqs = (eos_positions != 0)
+        mask = np.tile(np.arange(1025, dtype=np.int32)[None, :], (eos_positions.shape[0], 1))
+        masked = mask <= eos_positions[:, None]
+        noise_token_chunk = np.where(masked, noise_token_chunk, encoder.padding)[valid_seqs]
+        noise_token_chunks.append(noise_token_chunk)
+
+        prob_mask = masked[:, 1:]
+        prob_masked = (prob_mask * noise_prob_chunk)[valid_seqs]
+        noise_prob_masked = np.sum(prob_masked, axis=1)
+        assert prob_masked.shape[0] == noise_token_chunk.shape[0]
+        noise_prob_chunks.append(noise_prob_masked)
+    noise_tokens = np.concatenate(noise_token_chunks, axis=0)
+    n_probs = np.concatenate(noise_prob_chunks, axis=0)
+    if args.fixed_sample_size > 0:
+        assert noise_tokens.shape[0] > args.fixed_sample_size, noise_tokens.shape
+        noise_tokens = noise_tokens[:args.fixed_sample_size]
+        n_probs = n_probs[:args.fixed_sample_size]
+    # evaluate the noise samples under our model
+    noise_probs_under_model = get_seq_probs(seqs=noise_tokens,
+                                            batch_size=args.batch_size * args.num_gpus,
+                                            token_place_holders=all_tokens,
+                                            num_gpus=args.num_gpus,
+                                            tf_outputs=merged_probs,
+                                            ignore_ids_np=ignore_ids_np,
+                                            ignore_ids=ignore_ids, sess=sess,
+                                            seq_length=args.seq_length)
+    do_sanity_check = False
+    if do_sanity_check:
+        noise_probs_sanity_check = get_seq_probs(seqs=noise_tokens,
+                                                 batch_size=args.batch_size * args.num_gpus,
+                                                 token_place_holders=all_tokens,
+                                                 num_gpus=args.num_gpus,
+                                                 tf_outputs=merged_noise_probs,
+                                                 ignore_ids_np=ignore_ids_np,
+                                                 ignore_ids=ignore_ids, sess=sess, seq_length=args.seq_length)
+        diff = noise_probs_sanity_check - n_probs
+        print(f'sanity check: {np.sum(diff * diff)} {diff}')
+    assert noise_probs_under_model.shape == n_probs.shape
+    noise_output_fname = f'{args.noise_output_path}/{args.fold}.output.npz'
+    np.savez(noise_output_fname, noise_probs_under_model=np.reshape(noise_probs_under_model, (-1,)),
+             noise_probs_under_noise=np.reshape(n_probs, (-1,)))
+
+
 with tf.Session(config=tf_config, graph=tf.Graph()) as sess:
     batch_size_per_chunk = args.batch_size
     all_tokens = []
@@ -137,59 +194,8 @@ with tf.Session(config=tf_config, graph=tf.Graph()) as sess:
     restore('newslm', args.noise_model_ckpt, sess)
 
     # get noise samples first
-    noise_token_chunks = []
-    noise_prob_chunks = []
-    for chunk in tqdm(range(args.num_noise_chunks), disable=None):
-        noise_token_chunk, noise_prob_chunk = sess.run([merged_sampled_tokens, merged_sampled_probs],
-                                                       feed_dict={
-                                                           initial_context: [context_formatted] * batch_size_per_chunk,
-                                                           eos_token: encoder.__dict__['end_article'],
-                                                           ignore_ids: ignore_ids_np,
-                                                           p_for_topp: np.ones((batch_size_per_chunk,),
-                                                                               dtype=np.float32)}
-                                                       )
-        eos_positions = np.argmax(noise_token_chunk == encoder.__dict__['end_article'], axis=1)
-        valid_seqs = (eos_positions != 0)
-        mask = np.tile(np.arange(1025, dtype=np.int32)[None, :], (eos_positions.shape[0], 1))
-        masked = mask <= eos_positions[:, None]
-        noise_token_chunk = np.where(masked, noise_token_chunk, encoder.padding)[valid_seqs]
-        noise_token_chunks.append(noise_token_chunk)
+    # output_noise()
 
-        prob_mask = masked[:, 1:]
-        prob_masked = (prob_mask * noise_prob_chunk)[valid_seqs]
-        noise_prob_masked = np.sum(prob_masked, axis=1)
-        assert prob_masked.shape[0] == noise_token_chunk.shape[0]
-        noise_prob_chunks.append(noise_prob_masked)
-    noise_tokens = np.concatenate(noise_token_chunks, axis=0)
-    n_probs = np.concatenate(noise_prob_chunks, axis=0)
-    if args.fixed_sample_size > 0:
-        assert noise_tokens.shape[0] > args.fixed_sample_size, noise_tokens.shape
-        noise_tokens = noise_tokens[:args.fixed_sample_size]
-        n_probs = n_probs[:args.fixed_sample_size]
-    # evaluate the noise samples under our model
-    noise_probs_under_model = get_seq_probs(seqs=noise_tokens,
-                                            batch_size=args.batch_size * args.num_gpus,
-                                            token_place_holders=all_tokens,
-                                            num_gpus=args.num_gpus,
-                                            tf_outputs=merged_probs,
-                                            ignore_ids_np=ignore_ids_np,
-                                            ignore_ids=ignore_ids, sess=sess,
-                                            seq_length=args.seq_length)
-    do_sanity_check = False
-    if do_sanity_check:
-        noise_probs_sanity_check = get_seq_probs(seqs=noise_tokens,
-                                                 batch_size=args.batch_size * args.num_gpus,
-                                                 token_place_holders=all_tokens,
-                                                 num_gpus=args.num_gpus,
-                                                 tf_outputs=merged_noise_probs,
-                                                 ignore_ids_np=ignore_ids_np,
-                                                 ignore_ids=ignore_ids, sess=sess, seq_length=args.seq_length)
-        diff = noise_probs_sanity_check - n_probs
-        print(f'sanity check: {np.sum(diff*diff)} {diff}')
-    assert noise_probs_under_model.shape == n_probs.shape
-    noise_output_fname = f'{args.noise_output_path}/{args.fold}.output.npz'
-    np.savez(noise_output_fname, noise_probs_under_model=np.reshape(noise_probs_under_model, (-1,)),
-             noise_probs_under_noise=np.reshape(n_probs, (-1,)))
     # s_bar_noise = logsumexp(np.reshape(noise_probs_under_model, (-1,)) - np.reshape(n_probs, (-1,)), keepdims=True).reshape((-1,))
     # print(f's_bar_noise: {s_bar_noise} # of noise samples: {n_probs.shape}')
 
