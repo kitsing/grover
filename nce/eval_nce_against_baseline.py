@@ -10,7 +10,8 @@ def compute_nce_probs(inp, noises):
     z = np.concatenate(
         (true_weighted.reshape((-1, 1)), np.tile(noise_weighted.reshape((1, -1)), (true_weighted.shape[0], 1))), axis=1)
     probs = true_weighted - logsumexp(z, axis=1)
-    return probs
+    num_noises = z.shape[1]
+    return probs, num_noises
 
 def main():
     import argparse
@@ -20,10 +21,9 @@ def main():
 
     args = parser.parse_args()
 
-    probs = compute_nce_probs(args.inp, args.noises)
-    print(probs)
-    greater_than_chance = probs > - np.log(probs.shape[1])
-    print(greater_than_chance)
+    probs, num_noises = compute_nce_probs(args.inp, args.noises)
+    print(np.mean(probs))
+    greater_than_chance = probs > - np.log(num_noises)
     print(np.sum(greater_than_chance))
 
 if __name__ == '__main__':

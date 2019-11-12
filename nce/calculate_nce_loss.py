@@ -257,7 +257,7 @@ with tf.Session(config=tf_config, graph=tf.Graph()) as sess:
     from os.path import exists
 
     for file in args.our_files:
-        output_fname = f'{args.output_path}/{basename(output_fname)}.loss.npz'
+        output_fname = f'{args.output_path}/{basename(file)}.loss.npz'
         if exists(f'{output_fname}'):
             tf.logging.info(f'{output_fname} already exists. skipping...')
             continue
