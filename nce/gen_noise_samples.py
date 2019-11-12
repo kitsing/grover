@@ -61,7 +61,6 @@ rnd_seed(seed)
 tf.set_random_seed(seed)
 
 encoder = get_encoder()
-news_config = GroverConfig.from_json_file(args.model_config_fn)
 noise_news_config = GroverConfig.from_json_file(args.noise_model_config_fn)
 
 print('start: {}'.format(encoder.__dict__['begin_article']))
@@ -81,7 +80,7 @@ with tf.Session(config=tf_config, graph=tf.Graph()) as sess:
     initial_context = tf.placeholder(tf.int32, [batch_size_per_chunk, None])
     p_for_topp = tf.placeholder(tf.float32, [batch_size_per_chunk])
     eos_token = tf.placeholder(tf.int32, [])
-    ignore_ids = tf.placeholder(tf.bool, [news_config.vocab_size])
+    ignore_ids = tf.placeholder(tf.bool, [noise_news_config.vocab_size])
     ignore_ids_np = np.array(encoder.special_tokens_onehot)
     ignore_ids_np[encoder.__dict__['end_article']] = 0
     for i in range(args.num_gpus):
