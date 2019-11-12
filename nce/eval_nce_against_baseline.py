@@ -26,13 +26,14 @@ def get_all_noises(noise_files):
 
 
 def compute_prob_under_model(inp, model_config, batch_size_per_chunk, num_gpus, seq_length,
-                             gen_ckpt, dis_ckpt):
+                             gen_ckpt, dis_ckpt, noise_model_config):
     from sample.encoder import get_encoder
     from lm.modeling import GroverConfig, eval_seq
     from nce.utils import get_seq_probs
     from nce.utils import restore
     encoder = get_encoder()
     news_config = GroverConfig.from_json_file(model_config)
+    noise_news_config = GroverConfig.from_json_file(noise_model_config)
 
     tf_config = tf.ConfigProto(allow_soft_placement=True)
 
@@ -49,7 +50,7 @@ def compute_prob_under_model(inp, model_config, batch_size_per_chunk, num_gpus, 
                 tokens = tf.placeholder(tf.int32, [batch_size_per_chunk, seq_length])
                 all_tokens.append(tokens)
                 probs = tf.stop_gradient(eval_seq(news_config, tokens, 1., baseline=False,
-                                                  ignore_ids=ignore_ids, gen_config=news_config))
+                                                  ignore_ids=ignore_ids, gen_config=noise_news_config))
                 all_probs.append(probs)
 
 
@@ -75,9 +76,10 @@ def main():
     parser.add_argument('--inp', default='.')
     parser.add_argument('--noises')
     parser.add_argument('--model-config', default='/private/home/kitsing/git/grover/lm/configs/base.json')
-    parser.add_argument('--batch-size', default=8)
-    parser.add_argument('--seq-length', default=1025)
-    parser.add_argument('--num-gpus', default=8)
+    parser.add_argument('--noise-model-config', default='/private/home/kitsing/git/grover/lm/configs/base.json')
+    parser.add_argument('--batch-size', default=8, type=int)
+    parser.add_argument('--seq-length', default=1025, type=int)
+    parser.add_argument('--num-gpus', default=8, type=int)
     parser.add_argument('--gen-ckpt', default='/checkpoint/kitsing/grover-models/base/model.ckpt')
     parser.add_argument('--dis-ckpt', default='/checkpoint/kitsing/grover-models/base/model.ckpt')
     args = parser.parse_args()
@@ -86,7 +88,7 @@ def main():
     noise_tokens, noise_probs = get_all_noises(noise_files)
     noise_probs_under_model = compute_prob_under_model(noise_tokens, args.model_config,
                                                        args.batch_size, args.num_gpus, args.seq_length, args.gen_ckpt,
-                                                       args.dis_ckpt)
+                                                       args.dis_ckpt, args.noise_model_config)
     probs, num_noises = compute_nce_probs(args.inp, noise_probs, noise_probs_under_model)
     print(np.mean(probs))
     greater_than_chance = probs > - np.log(num_noises)

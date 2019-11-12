@@ -36,7 +36,7 @@ def restore(scope, checkpoint, sess):
         else:
             tf.logging.warn(f'key {name} does not start with {scope}')
 
-    tf.logging.warn(f'unused variables in checkpoint: {unused_vars_in_checkpoint}')
+    tf.logging.warn(f'scope={scope}, checkpoint={checkpoint}, unused variables in checkpoint: {unused_vars_in_checkpoint}')
     # print(gen_assignment_map)
     saver = tf.train.Saver(var_list=assignment_map)
     saver.restore(sess, checkpoint)

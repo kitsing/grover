@@ -577,7 +577,7 @@ class GroverModelResidual(object):
                                name_or_scope=scope):
             num_loss, residuals = get_num_loss()
             if not ignore_noise:
-                loss = num_loss() + get_denom_loss()
+                loss = num_loss + get_denom_loss()
                 # loss = tf.cond(sampled_num_or_denom, get_num_loss, get_denom_loss)
                 self.loss = loss
             self.residuals = residuals
