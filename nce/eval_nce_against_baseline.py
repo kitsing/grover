@@ -25,7 +25,7 @@ def get_all_noises(noise_files):
     return np.concatenate(all_noises, axis=0), np.concatenate(all_noise_probs, axis=0)
 
 
-def compute_prob_under_model(inp, noise_model_config, model_config, batch_size_per_chunk, num_gpus, seq_length,
+def compute_prob_under_model(inp, model_config, batch_size_per_chunk, num_gpus, seq_length,
                              gen_ckpt, dis_ckpt):
     from sample.encoder import get_encoder
     from lm.modeling import GroverConfig, eval_seq
@@ -49,7 +49,7 @@ def compute_prob_under_model(inp, noise_model_config, model_config, batch_size_p
                 tokens = tf.placeholder(tf.int32, [batch_size_per_chunk, seq_length])
                 all_tokens.append(tokens)
                 probs = tf.stop_gradient(eval_seq(news_config, tokens, 1., baseline=False,
-                                                  ignore_ids=ignore_ids, gen_config=noise_model_config))
+                                                  ignore_ids=ignore_ids, gen_config=news_config))
                 all_probs.append(probs)
 
 
@@ -74,7 +74,6 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--inp', default='.')
     parser.add_argument('--noises')
-    parser.add_argument('--noise-model-config', default='/private/home/kitsing/git/grover/lm/configs/base.json')
     parser.add_argument('--model-config', default='/private/home/kitsing/git/grover/lm/configs/base.json')
     parser.add_argument('--batch-size', default=8)
     parser.add_argument('--seq-length', default=1025)
@@ -85,7 +84,7 @@ def main():
     from glob import glob
     noise_files = glob(args.noises)
     noise_tokens, noise_probs = get_all_noises(noise_files)
-    noise_probs_under_model = compute_prob_under_model(noise_tokens, args.noise_model_config, args.model_config,
+    noise_probs_under_model = compute_prob_under_model(noise_tokens, args.model_config,
                                                        args.batch_size, args.num_gpus, args.seq_length, args.gen_ckpt,
                                                        args.dis_ckpt)
     probs, num_noises = compute_nce_probs(args.inp, noise_probs, noise_probs_under_model)
