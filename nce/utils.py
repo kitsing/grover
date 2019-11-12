@@ -10,6 +10,7 @@ def restore(scope, checkpoint, sess):
     checkpoint_names = [_[0] for _ in checkpoint_vars]
     assignment_map = dict()
     unused_vars_in_checkpoint = set(checkpoint_names)
+    unused_vars_in_graph = set(vars)
     for var in vars:
         name = var.name
         assert name.endswith(':0')
@@ -31,12 +32,15 @@ def restore(scope, checkpoint, sess):
                 assignment_map[new_name] = var
                 tf.logging.info(f'key found: {new_name} -> {name}')
                 unused_vars_in_checkpoint.remove(new_name)
+                unused_vars_in_graph.remove(var)
             else:
                 tf.logging.warn(f'key not found: {new_name}')
         else:
             tf.logging.warn(f'key {name} does not start with {scope}')
 
     tf.logging.warn(f'scope={scope}, checkpoint={checkpoint}, unused variables in checkpoint: {unused_vars_in_checkpoint}')
+    tf.logging.warn(
+        f'scope={scope}, checkpoint={checkpoint}, unused variables in graph: {unused_vars_in_graph}')
     # print(gen_assignment_map)
     saver = tf.train.Saver(var_list=assignment_map)
     saver.restore(sess, checkpoint)
