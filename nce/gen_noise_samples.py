@@ -5,7 +5,7 @@ import argparse
 from glob import glob
 
 sys.path.append('../')
-from lm.modeling import GroverConfig, eval_seq, sample
+from lm.modeling import GroverConfig, sample
 from sample.encoder import get_encoder
 from tqdm import tqdm
 from os import environ
@@ -13,7 +13,7 @@ from os.path import basename
 from random import seed as rnd_seed
 from scipy.special import logsumexp
 from math import ceil
-from nce.calculate_nce_loss import eval_seq, get_seq_probs, restore
+from nce.utils import restore
 
 parser = argparse.ArgumentParser(description='Evaluation')
 
@@ -96,7 +96,7 @@ with tf.Session(config=tf_config, graph=tf.Graph()) as sess:
         merged_sampled_probs = tf.concat(all_sampled_probs, axis=0)
         merged_sampled_tokens = tf.concat(all_sampled_tokens, axis=0)
 
-    restore('newslm', args.noise_model_ckpt)
+    restore('newslm', args.noise_model_ckpt, sess)
 
     # get noise samples first
     noise_token_chunks = []

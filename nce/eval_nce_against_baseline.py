@@ -29,7 +29,8 @@ def compute_prob_under_model(inp, noise_model_config, model_config, batch_size_p
                              gen_ckpt, dis_ckpt):
     from sample.encoder import get_encoder
     from lm.modeling import GroverConfig, sample
-    from nce.calculate_nce_loss import eval_seq, restore, get_seq_probs
+    from nce.calculate_nce_loss import eval_seq, get_seq_probs
+    from nce.utils import restore
     encoder = get_encoder()
     news_config = GroverConfig.from_json_file(model_config)
 
@@ -55,8 +56,8 @@ def compute_prob_under_model(inp, noise_model_config, model_config, batch_size_p
         with tf.device('/cpu:0'):
             merged_probs = tf.concat(all_probs, axis=0)
 
-        restore('gen', gen_ckpt)
-        restore('dis', dis_ckpt)
+        restore('gen', gen_ckpt, sess)
+        restore('dis', dis_ckpt, sess)
 
         probs_under_model = get_seq_probs(seqs=inp,
                                           batch_size=batch_size_per_chunk * num_gpus,
