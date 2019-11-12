@@ -38,7 +38,8 @@ def restore(scope, checkpoint, sess):
         else:
             tf.logging.warn(f'key {name} does not start with {scope}')
 
-    tf.logging.warn(f'scope={scope}, checkpoint={checkpoint}, unused variables in checkpoint: {unused_vars_in_checkpoint}')
+    unused_relevant_vars = [_ for _ in unused_vars_in_checkpoint if 'adafactor' not in _ and 'Adafactor' not in _]
+    tf.logging.warn(f'scope={scope}, checkpoint={checkpoint}, unused relevant variables in checkpoint: {unused_relevant_vars}')
     tf.logging.warn(
         f'scope={scope}, checkpoint={checkpoint}, unused variables in graph: {unused_vars_in_graph}')
     # print(gen_assignment_map)
