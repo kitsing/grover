@@ -151,9 +151,6 @@ with tf.Session(config=tf_config, graph=tf.Graph()) as sess:
     all_probs = []
     all_noise_probs = []
 
-    all_sampled_tokens = []
-    all_sampled_probs = []
-
     initial_context = tf.placeholder(tf.int32, [batch_size_per_chunk, None])
     p_for_topp = tf.placeholder(tf.float32, [batch_size_per_chunk])
     eos_token = tf.placeholder(tf.int32, [])
@@ -162,13 +159,6 @@ with tf.Session(config=tf_config, graph=tf.Graph()) as sess:
     ignore_ids_np[encoder.__dict__['end_article']] = 0
     for i in range(args.num_gpus):
         with tf.device('/gpu:' + str(i)):
-            # sampled noises
-            sampled_tokens, sampled_probs = sample(news_config=noise_news_config, initial_context=initial_context,
-                                                   eos_token=eos_token, ignore_ids=ignore_ids, p_for_topp=p_for_topp,
-                                                   do_topk=False, seed=i, max_out_tensor=True, vanilla=True)
-            all_sampled_tokens.append(sampled_tokens)
-            all_sampled_probs.append(sampled_probs)
-
             # actual examples
             tokens = tf.placeholder(tf.int32, [batch_size_per_chunk, args.seq_length])
             all_tokens.append(tokens)
@@ -185,8 +175,6 @@ with tf.Session(config=tf_config, graph=tf.Graph()) as sess:
 
     with tf.device('/cpu:0'):
         merged_probs = tf.concat(all_probs, axis=0)
-        merged_sampled_probs = tf.concat(all_sampled_probs, axis=0)
-        merged_sampled_tokens = tf.concat(all_sampled_tokens, axis=0)
         merged_noise_probs = tf.concat(all_noise_probs, axis=0)
 
     restore('gen', args.gen_model_ckpt, sess)

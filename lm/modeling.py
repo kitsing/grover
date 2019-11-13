@@ -488,6 +488,21 @@ def _top_k_sample(logits, ignore_ids=None, num_samples=1, k=10):
 
 
 class GroverModelResidual(object):
+    def flip_before_eos(self, t: tf.Tensor):
+        """
+
+        :param t:
+        :return:
+        """
+        batch_size, seq_length = get_shape_list(t, 2)
+        pad_locations = tf.math.equal(t, self.pad_token_id)
+        pad_indices = tf.segment_min(pad_locations[:, 1], pad_locations[:, 0])
+        # pad_indices is also an array of seq lengths
+        r = tf.tile(tf.range(seq_length, dtype=tf.int32)[None, :], (batch_size, 1))
+
+        masked = tf.math.less(r, pad_indices[:, None])
+        return tf.where(masked, t[-r + pad_indices - 1], self.pad_token_id)
+
     def __init__(self,
                  config: GroverConfig,
                  is_training,
@@ -547,29 +562,31 @@ class GroverModelResidual(object):
 
         def get_loss(inp):
             to_score = truncate(inp)
-            batch_size, seq_length = get_shape_list(to_score, 2)
+            flipped = self.flip_before_eos(to_score)
+            to_score = tf.concat((to_score[:, :, None], flipped[:, :, None]), axis=2)
+            batch_size, seq_length, _ = get_shape_list(to_score, 3)
             if is_training and self.config.word_dropout_prob > 0.:
                 b = Bernoulli(probs=(1 - self.config.word_dropout_prob), dtype=tf.bool)
                 word_dropout_mask = b.sample(sample_shape=(batch_size, seq_length))
-                self.input_ids = tf.where(word_dropout_mask,
-                                          to_score,
-                                          tf.fill(
-                                              (batch_size, seq_length),
-                                              self.pad_token_id)
-                                          )
+                to_score = tf.where(word_dropout_mask[:, :, None],
+                                    to_score,
+                                    tf.fill(
+                                        (batch_size, seq_length, 2),
+                                        self.pad_token_id)
+                                    )
             if self.config.mask_padding:
                 label_weights = tf.cast(tf.not_equal(tf.reshape(to_score, [-1]),
                                                      self.pad_token_id),
                                         dtype=tf.float32)
             else:
-                label_weights = tf.reshape(tf.ones_like(self.input_ids, dtype=tf.float32), (-1,))
+                label_weights = tf.reshape(tf.ones_like(to_score, dtype=tf.float32), (-1,))
             assert self.config.max_position_embeddings >= seq_length
             caches = [None] * self.config.num_hidden_layers
             self.cache_length = 0
 
             with tf.variable_scope(default_name='newslm', reuse=reuse,
                                    name_or_scope=scope):
-                residuals = self.score_seq(caches, config, do_cache, is_training, label_weights, to_score,
+                residuals = self.score_seq(caches, self.config, do_cache, is_training, label_weights, to_score,
                                            reuse, batch_size, seq_length)
                 return tf.reshape(residuals, (batch_size,))
 
@@ -606,7 +623,8 @@ class GroverModelResidual(object):
         # forth from a 3D tensor to a 2D tensor. Re-shapes are normally free on
         # the GPU/CPU but may not be free on the TPU, so we want to minimize them to
         # help the optimizer.
-        hidden_state = tf.reshape(embeddings, [original_batch_size * seq_length, config.hidden_size])
+        hidden_state = tf.reshape(embeddings, [original_batch_size * seq_length, 2, config.hidden_size])
+        hidden_state = tf.reduce_sum(hidden_state, axis=1)
         new_kvs = []
         for layer_idx, layer_cache in enumerate(caches):
             with tf.variable_scope('layer{:02d}'.format(layer_idx)):
