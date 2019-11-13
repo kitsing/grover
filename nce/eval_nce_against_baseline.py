@@ -86,6 +86,7 @@ def main():
     from glob import glob
     noise_files = glob(args.noises)
     noise_tokens, noise_probs = get_all_noises(noise_files)
+    print(f'noise shape: {noise_probs.shape}')
     noise_probs_under_model = compute_prob_under_model(noise_tokens, args.model_config,
                                                        args.batch_size, args.num_gpus, args.seq_length, args.gen_ckpt,
                                                        args.dis_ckpt, args.noise_model_config)

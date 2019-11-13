@@ -189,6 +189,10 @@ with tf.Session(config=tf_config, graph=tf.Graph()) as sess:
         merged_sampled_tokens = tf.concat(all_sampled_tokens, axis=0)
         merged_noise_probs = tf.concat(all_noise_probs, axis=0)
 
+    g_vars = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope='evaluate_sequence')
+    print('eval_seq variables')
+    print(g_vars)
+
     restore('gen', args.gen_model_ckpt, sess)
     restore('dis', args.dis_model_ckpt, sess)
     restore('newslm', args.noise_model_ckpt, sess)
