@@ -30,7 +30,7 @@ def get_tokens(token_file):
 
 
 def compute_prob_under_model(model_config, batch_size_per_chunk, num_gpus, seq_length,
-                             gen_ckpt, dis_ckpt, noise_model_config):
+                             gen_ckpt, dis_ckpt, noise_model_config, sess):
     from sample.encoder import get_encoder
     from lm.modeling import GroverConfig, eval_seq
     from nce.utils import get_seq_probs
@@ -39,43 +39,40 @@ def compute_prob_under_model(model_config, batch_size_per_chunk, num_gpus, seq_l
     news_config = GroverConfig.from_json_file(model_config)
     noise_news_config = GroverConfig.from_json_file(noise_model_config)
 
-    tf_config = tf.ConfigProto(allow_soft_placement=True)
+    all_tokens = []
+    all_probs = []
+    all_probs_under_noise = []
 
-    with tf.Session(config=tf_config, graph=tf.Graph()) as sess:
-        all_tokens = []
-        all_probs = []
-        all_probs_under_noise = []
+    ignore_ids = tf.placeholder(tf.bool, [news_config.vocab_size])
+    ignore_ids_np = np.array(encoder.special_tokens_onehot)
+    ignore_ids_np[encoder.__dict__['end_article']] = 0
+    for i in range(num_gpus):
+        with tf.device('/gpu:' + str(i)):
+            # actual examples
+            tokens = tf.placeholder(tf.int32, [batch_size_per_chunk, seq_length])
+            all_tokens.append(tokens)
+            probs = tf.stop_gradient(eval_seq(news_config, tokens, 1., baseline=False,
+                                              ignore_ids=ignore_ids, gen_config=noise_news_config))
+            all_probs.append(probs)
+            noise_probs = tf.stop_gradient(eval_seq(noise_news_config, tokens, 1., baseline=True,
+                                                    ignore_ids=ignore_ids, gen_config=noise_news_config))
+            all_probs_under_noise.append(noise_probs)
 
-        ignore_ids = tf.placeholder(tf.bool, [news_config.vocab_size])
-        ignore_ids_np = np.array(encoder.special_tokens_onehot)
-        ignore_ids_np[encoder.__dict__['end_article']] = 0
-        for i in range(num_gpus):
-            with tf.device('/gpu:' + str(i)):
-                # actual examples
-                tokens = tf.placeholder(tf.int32, [batch_size_per_chunk, seq_length])
-                all_tokens.append(tokens)
-                probs = tf.stop_gradient(eval_seq(news_config, tokens, 1., baseline=False,
-                                                  ignore_ids=ignore_ids, gen_config=noise_news_config))
-                all_probs.append(probs)
-                noise_probs = tf.stop_gradient(eval_seq(noise_news_config, tokens, 1., baseline=True,
-                                                        ignore_ids=ignore_ids, gen_config=noise_news_config))
-                all_probs_under_noise.append(noise_probs)
+    with tf.device('/cpu:0'):
+        merged_probs = tf.concat(all_probs, axis=0)
+        merged_noise_probs = tf.concat(all_probs_under_noise, axis=0)
 
-        with tf.device('/cpu:0'):
-            merged_probs = tf.concat(all_probs, axis=0)
-            merged_noise_probs = tf.concat(all_probs_under_noise, axis=0)
+    restore('gen', gen_ckpt, sess)
+    restore('dis', dis_ckpt, sess)
 
-        restore('gen', gen_ckpt, sess)
-        restore('dis', dis_ckpt, sess)
-
-        probs_under_model = lambda inp: get_seq_probs(seqs=inp,
-                                                      batch_size=batch_size_per_chunk * num_gpus,
-                                                      token_place_holders=all_tokens,
-                                                      num_gpus=num_gpus,
-                                                      tf_outputs=[merged_probs, merged_noise_probs],
-                                                      ignore_ids_np=ignore_ids_np,
-                                                      ignore_ids=ignore_ids, sess=sess, seq_length=seq_length)
-        return probs_under_model
+    probs_under_model = lambda inp: get_seq_probs(seqs=inp,
+                                                  batch_size=batch_size_per_chunk * num_gpus,
+                                                  token_place_holders=all_tokens,
+                                                  num_gpus=num_gpus,
+                                                  tf_outputs=[merged_probs, merged_noise_probs],
+                                                  ignore_ids_np=ignore_ids_np,
+                                                  ignore_ids=ignore_ids, sess=sess, seq_length=seq_length)
+    return probs_under_model
 
 
 def main():
@@ -96,10 +93,12 @@ def main():
     noise_tokens, _ = get_all_noises(noise_files)
     inp_tokens = get_tokens(args.inp)
     print(f'noise shape: {noise_tokens.shape}')
+    tf_config = tf.ConfigProto(allow_soft_placement=True)
+    sess = tf.Session(config=tf_config, graph=tf.Graph())
     compute_prob = compute_prob_under_model(args.model_config,
                                             args.batch_size, args.num_gpus,
                                             args.seq_length, args.gen_ckpt,
-                                            args.dis_ckpt, args.noise_model_config)
+                                            args.dis_ckpt, args.noise_model_config, sess)
     noise_probs_under_model, noise_probs_under_noise = compute_prob(noise_tokens)
     inp_probs_under_model, inp_probs_under_noise = compute_prob(inp_tokens)
     probs, num_noises = compute_nce_probs(inp_probs_under_model, inp_probs_under_noise, noise_probs_under_noise,
