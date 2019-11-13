@@ -4,10 +4,9 @@ from scipy.special import logsumexp
 import tensorflow as tf
 
 
-def compute_nce_probs(inp, noise_probs, noise_probs_under_model):
-    loaded = np.load(inp)
+def compute_nce_probs(input_probs_under_model, input_probs_under_noise, noise_probs, noise_probs_under_model):
     noise_weighted = noise_probs_under_model - noise_probs
-    true_weighted = loaded['input_probs_under_model'] - loaded['input_probs_under_noise']
+    true_weighted = input_probs_under_model - input_probs_under_noise
     z = np.concatenate(
         (true_weighted.reshape((-1, 1)), np.tile(noise_weighted.reshape((1, -1)), (true_weighted.shape[0], 1))), axis=1)
     probs = true_weighted - logsumexp(z, axis=1)
@@ -25,7 +24,12 @@ def get_all_noises(noise_files):
     return np.concatenate(all_noises, axis=0), np.concatenate(all_noise_probs, axis=0)
 
 
-def compute_prob_under_model(inp, model_config, batch_size_per_chunk, num_gpus, seq_length,
+def get_tokens(token_file):
+    with np.load(token_file) as f:
+        return f['tokens']
+
+
+def compute_prob_under_model(model_config, batch_size_per_chunk, num_gpus, seq_length,
                              gen_ckpt, dis_ckpt, noise_model_config):
     from sample.encoder import get_encoder
     from lm.modeling import GroverConfig, eval_seq
@@ -40,6 +44,7 @@ def compute_prob_under_model(inp, model_config, batch_size_per_chunk, num_gpus, 
     with tf.Session(config=tf_config, graph=tf.Graph()) as sess:
         all_tokens = []
         all_probs = []
+        all_probs_under_noise = []
 
         ignore_ids = tf.placeholder(tf.bool, [news_config.vocab_size])
         ignore_ids_np = np.array(encoder.special_tokens_onehot)
@@ -52,21 +57,24 @@ def compute_prob_under_model(inp, model_config, batch_size_per_chunk, num_gpus, 
                 probs = tf.stop_gradient(eval_seq(news_config, tokens, 1., baseline=False,
                                                   ignore_ids=ignore_ids, gen_config=noise_news_config))
                 all_probs.append(probs)
-
+                noise_probs = tf.stop_gradient(eval_seq(noise_news_config, tokens, 1., baseline=True,
+                                                        ignore_ids=ignore_ids, gen_config=noise_news_config))
+                all_probs_under_noise.append(noise_probs)
 
         with tf.device('/cpu:0'):
             merged_probs = tf.concat(all_probs, axis=0)
+            merged_noise_probs = tf.concat(all_probs_under_noise, axis=0)
 
         restore('gen', gen_ckpt, sess)
         restore('dis', dis_ckpt, sess)
 
-        probs_under_model = get_seq_probs(seqs=inp,
-                                          batch_size=batch_size_per_chunk * num_gpus,
-                                          token_place_holders=all_tokens,
-                                          num_gpus=num_gpus,
-                                          tf_outputs=merged_probs,
-                                          ignore_ids_np=ignore_ids_np,
-                                          ignore_ids=ignore_ids, sess=sess, seq_length=seq_length)
+        probs_under_model = lambda inp: get_seq_probs(seqs=inp,
+                                                      batch_size=batch_size_per_chunk * num_gpus,
+                                                      token_place_holders=all_tokens,
+                                                      num_gpus=num_gpus,
+                                                      tf_outputs=[merged_probs, merged_noise_probs],
+                                                      ignore_ids_np=ignore_ids_np,
+                                                      ignore_ids=ignore_ids, sess=sess, seq_length=seq_length)
         return probs_under_model
 
 
@@ -85,15 +93,21 @@ def main():
     args = parser.parse_args()
     from glob import glob
     noise_files = glob(args.noises)
-    noise_tokens, noise_probs = get_all_noises(noise_files)
-    print(f'noise shape: {noise_probs.shape}')
-    noise_probs_under_model = compute_prob_under_model(noise_tokens, args.model_config,
-                                                       args.batch_size, args.num_gpus, args.seq_length, args.gen_ckpt,
-                                                       args.dis_ckpt, args.noise_model_config)
-    probs, num_noises = compute_nce_probs(args.inp, noise_probs, noise_probs_under_model)
+    noise_tokens, _ = get_all_noises(noise_files)
+    inp_tokens = get_tokens(args.inp)
+    print(f'noise shape: {noise_tokens.shape}')
+    compute_prob = compute_prob_under_model(args.model_config,
+                                            args.batch_size, args.num_gpus,
+                                            args.seq_length, args.gen_ckpt,
+                                            args.dis_ckpt, args.noise_model_config)
+    noise_probs_under_model, noise_probs_under_noise = compute_prob(noise_tokens)
+    inp_probs_under_model, inp_probs_under_noise = compute_prob(inp_tokens)
+    probs, num_noises = compute_nce_probs(inp_probs_under_model, inp_probs_under_noise, noise_probs_under_noise,
+                                          noise_probs_under_model)
     print(np.mean(probs))
     greater_than_chance = probs > - np.log(num_noises)
     print(np.sum(greater_than_chance))
+
 
 if __name__ == '__main__':
     main()
