@@ -17,8 +17,8 @@ OUTPUT_DIR=${1} # put your output directory here
 init_checkpoint=${2}
 model_type=${3}
 gen_checkpoint=${4}
-input_file="/checkpoint/kitsing/grover/tfrecords/preprocessed_valid0[1-8]*.tfrecord" # put your input files here, it can also be something like "*.tfrecord"
-input_dev_file="/checkpoint/kitsing/grover/tfrecords/preprocessed_valid00*.tfrecord" # put your input files here, it can also be something like "*.tfrecord"
+input_file="/checkpoint/kitsing/grover/tfrecords/preprocessed_val0[1-8]*.tfrecord" # put your input files here, it can also be something like "*.tfrecord"
+input_dev_file="/checkpoint/kitsing/grover/tfrecords/preprocessed_val00*.tfrecord" # put your input files here, it can also be something like "*.tfrecord"
 
 noise_file="/checkpoint/kitsing/grover/unconditional_samples_vanilla/[0-6]/*.npz"
 noise_dev_file="/checkpoint/kitsing/grover/unconditional_samples_vanilla/7/*.npz"
