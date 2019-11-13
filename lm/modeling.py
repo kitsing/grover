@@ -495,13 +495,8 @@ class GroverModelResidual(object):
         :return:
         """
         batch_size, seq_length = get_shape_list(t, 2)
-        pad_locations = tf.math.equal(t, self.pad_token_id)
-        pad_indices = tf.segment_min(pad_locations[:, 1], pad_locations[:, 0])
-        # pad_indices is also an array of seq lengths
-        r = tf.tile(tf.range(seq_length, dtype=tf.int32)[None, :], (batch_size, 1))
-
-        masked = tf.math.less(r, pad_indices[:, None])
-        return tf.where(masked, t[-r + pad_indices - 1], self.pad_token_id)
+        pad_lengths = tf.reduce_sum(tf.cast(tf.math.not_equal(t, self.pad_token_id), tf.int32), axis=1)
+        return tf.reverse_sequence(t, pad_lengths, seq_dim=1, batch_dim=0)
 
     def __init__(self,
                  config: GroverConfig,
@@ -561,9 +556,9 @@ class GroverModelResidual(object):
             return - tf.reduce_mean(scored, axis=0), scored
 
         def get_loss(inp):
-            to_score = truncate(inp)
-            flipped = self.flip_before_eos(to_score)
-            to_score = tf.concat((to_score[:, :, None], flipped[:, :, None]), axis=2)
+            orig = truncate(inp)
+            flipped = self.flip_before_eos(orig)
+            to_score = tf.concat((orig[:, :, None], flipped[:, :, None]), axis=2)
             batch_size, seq_length, _ = get_shape_list(to_score, 3)
             if is_training and self.config.word_dropout_prob > 0.:
                 b = Bernoulli(probs=(1 - self.config.word_dropout_prob), dtype=tf.bool)
@@ -575,11 +570,11 @@ class GroverModelResidual(object):
                                         self.pad_token_id)
                                     )
             if self.config.mask_padding:
-                label_weights = tf.cast(tf.not_equal(tf.reshape(to_score, [-1]),
+                label_weights = tf.cast(tf.not_equal(tf.reshape(orig, [-1]),
                                                      self.pad_token_id),
                                         dtype=tf.float32)
             else:
-                label_weights = tf.reshape(tf.ones_like(to_score, dtype=tf.float32), (-1,))
+                label_weights = tf.reshape(tf.ones_like(orig, dtype=tf.float32), (-1,))
             assert self.config.max_position_embeddings >= seq_length
             caches = [None] * self.config.num_hidden_layers
             self.cache_length = 0
@@ -606,12 +601,19 @@ class GroverModelResidual(object):
     def score_seq(self, caches, config: GroverConfig, do_cache, is_training, label_weights, to_score,
                   reuse, original_batch_size, seq_length):
         with tf.variable_scope("embeddings"):
-            embeddings, embedding_table = embed(to_score, config.vocab_size,
+            embeddings, embedding_table = embed(to_score[:, :, 0], config.vocab_size,
                                                 config.hidden_size,
                                                 position_offset=self.cache_length,
                                                 initializer_range=config.initializer_range,
                                                 max_position_embeddings=config.max_position_embeddings,
                                                 use_one_hot_embeddings=True)
+            embeddings_2, _ = embed(to_score[:, :, 1], config.vocab_size,
+                                    config.hidden_size,
+                                    position_offset=self.cache_length,
+                                    initializer_range=config.initializer_range,
+                                    max_position_embeddings=config.max_position_embeddings,
+                                    use_one_hot_embeddings=True)
+            embeddings = embeddings + embeddings_2
         if config.reuse_gen:
             # reusing the original model for embeddings. to ensure correctness we make use of the original masks
             mask = get_attention_mask(seq_length, seq_length + self.cache_length, dtype=embeddings.dtype)
@@ -623,8 +625,7 @@ class GroverModelResidual(object):
         # forth from a 3D tensor to a 2D tensor. Re-shapes are normally free on
         # the GPU/CPU but may not be free on the TPU, so we want to minimize them to
         # help the optimizer.
-        hidden_state = tf.reshape(embeddings, [original_batch_size * seq_length, 2, config.hidden_size])
-        hidden_state = tf.reduce_sum(hidden_state, axis=1)
+        hidden_state = tf.reshape(embeddings, [original_batch_size * seq_length, config.hidden_size])
         new_kvs = []
         for layer_idx, layer_cache in enumerate(caches):
             with tf.variable_scope('layer{:02d}'.format(layer_idx)):
