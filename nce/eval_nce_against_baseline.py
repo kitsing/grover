@@ -99,7 +99,9 @@ def main():
                                                 args.batch_size, args.num_gpus,
                                                 args.seq_length, args.gen_ckpt,
                                                 args.dis_ckpt, args.noise_model_config, sess)
-        noise_probs_under_model, noise_probs_under_noise = tuple(compute_prob(noise_tokens))
+        noise_probs = compute_prob(noise_tokens)
+        print(noise_probs)
+        noise_probs_under_model, noise_probs_under_noise = tuple(noise_probs)
         inp_probs_under_model, inp_probs_under_noise = tuple(compute_prob(inp_tokens))
         probs, num_noises = compute_nce_probs(inp_probs_under_model, inp_probs_under_noise, noise_probs_under_noise,
                                               noise_probs_under_model)
