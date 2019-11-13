@@ -48,7 +48,11 @@ def restore(scope, checkpoint, sess):
 
 
 def get_seq_probs(seqs, batch_size, token_place_holders, num_gpus, tf_outputs, ignore_ids, ignore_ids_np, sess, seq_length):
+    if not isinstance(tf_outputs, list):
+        tf_outputs = [tf_outputs]
     outputs = []
+    for _ in range(len(tf_outputs)):
+        outputs.append([])
     num_batches = int(ceil(seqs.shape[0] / batch_size))
     for batch in tqdm(range(num_batches), disable=None):
         this_batch: np.ndarray = seqs[batch_size * batch: batch_size * (batch + 1)]
@@ -61,7 +65,9 @@ def get_seq_probs(seqs, batch_size, token_place_holders, num_gpus, tf_outputs, i
         splitted_batch = np.split(this_batch, num_gpus)
         for tok, b in zip(token_place_holders, splitted_batch):
             feed_dict[tok] = b
-        probs_out = sess.run([tf_outputs],
+
+        probs_out = sess.run(tf_outputs,
                              feed_dict=feed_dict)
-        outputs.append(probs_out)
-    return np.concatenate(outputs, axis=0).reshape((-1,))[:seqs.shape[0]]
+        for o,p in zip(outputs,probs_out):
+            o.append(p)
+    return tuple([np.concatenate(o, axis=0).reshape((-1,))[:seqs.shape[0]] for o in outputs])
