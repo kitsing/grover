@@ -94,15 +94,15 @@ def main():
     inp_tokens = get_tokens(args.inp)
     print(f'noise shape: {noise_tokens.shape}')
     tf_config = tf.ConfigProto(allow_soft_placement=True)
-    sess = tf.Session(config=tf_config, graph=tf.Graph())
-    compute_prob = compute_prob_under_model(args.model_config,
-                                            args.batch_size, args.num_gpus,
-                                            args.seq_length, args.gen_ckpt,
-                                            args.dis_ckpt, args.noise_model_config, sess)
-    noise_probs_under_model, noise_probs_under_noise = compute_prob(noise_tokens)
-    inp_probs_under_model, inp_probs_under_noise = compute_prob(inp_tokens)
-    probs, num_noises = compute_nce_probs(inp_probs_under_model, inp_probs_under_noise, noise_probs_under_noise,
-                                          noise_probs_under_model)
+    with tf.Session(config=tf_config, graph=tf.Graph()) as sess:
+        compute_prob = compute_prob_under_model(args.model_config,
+                                                args.batch_size, args.num_gpus,
+                                                args.seq_length, args.gen_ckpt,
+                                                args.dis_ckpt, args.noise_model_config, sess)
+        noise_probs_under_model, noise_probs_under_noise = compute_prob(noise_tokens)
+        inp_probs_under_model, inp_probs_under_noise = compute_prob(inp_tokens)
+        probs, num_noises = compute_nce_probs(inp_probs_under_model, inp_probs_under_noise, noise_probs_under_noise,
+                                              noise_probs_under_model)
     print(np.mean(probs))
     greater_than_chance = probs > - np.log(num_noises)
     print(np.sum(greater_than_chance))
