@@ -537,7 +537,7 @@ class GroverModelResidual(object):
 
         def truncate(inp):
             if self.config.truncate_right:
-                return inp[:, -1]
+                return inp[:, :-1]
             else:
                 return inp[:, 1:]
 
