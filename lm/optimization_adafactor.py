@@ -345,7 +345,7 @@ def create_optimizer(loss, init_lr, num_train_steps, num_warmup_steps,
     # to_train = [_ for _ in tvar if 'LayerNorm' not in _.name and 'layer_norm' not in _.name and 'bias' not in _.name]
     # tf.logging.warn(f'### TVAR: {[_.name for _ in to_train]}')
     # train_op = optimizer.minimize(loss, global_step=tf.train.get_global_step(), iter_size=niter, var_list=to_train)
-    train_op = optimizer.minimize(loss, global_step=tf.train.get_global_step(), iter_size=niter)
+    train_op = optimizer.minimize(loss, global_step=tf.train.get_global_step(), iter_size=1)
 
     train_metrics = {
         'learning_rate': learning_rate,

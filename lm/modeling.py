@@ -947,7 +947,7 @@ def model_fn_builder(config: GroverConfig, init_checkpoint, learning_rate,
         total_loss = model.lm_loss()
 
         if is_training:
-            train_op, train_metrics = optimization_adafactor.create_optimizer(
+            train_op, train_metrics, _ = optimization_adafactor.create_optimizer(
                 total_loss, learning_rate, num_train_steps, num_warmup_steps, use_tpu)
             tvars = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES)
         else:
@@ -994,7 +994,7 @@ def model_fn_builder(config: GroverConfig, init_checkpoint, learning_rate,
                     train_op=train_op,
                     training_hooks=[
                         tf.train.LoggingTensorHook({'loss': tf.metrics.mean(total_loss)[1]}, every_n_iter=100)],
-                    scaffold_fn=scaffold_fn)
+                    )
 
         elif mode == tf.estimator.ModeKeys.EVAL:
             def metric_fn(total_loss):
@@ -1410,7 +1410,7 @@ def classification_model_fn_builder(config: GroverConfig, init_checkpoint, learn
                     train_op=train_op,
                     training_hooks=[
                         tf.train.LoggingTensorHook({'loss': tf.metrics.mean(total_loss)[1]}, every_n_iter=100)],
-                    scaffold_fn=scaffold_fn)
+                    )
 
         elif mode == tf.estimator.ModeKeys.EVAL:
             def metric_fn(per_example_loss, label_ids, logits, is_real_example):

@@ -27,15 +27,15 @@ fi
 
 
 # there are 20k * 1024 examples so this translates to 20 epochs. seems ok and i can run for more if needed
-num_train_steps=5000
+num_train_steps=855000
 
 # Make sure batch size scales.
 let batch_size="8"
 
 export XLA_FLAGS="--xla_gpu_cuda_data_dir=${CUDA_HOME}"
 
-python train.py \
-    --config_file=configs/${model_type}.json \
+python lm/train.py \
+    --config_file=lm/configs/${model_type}.json \
     --input_file=${input_file} \
     --output_dir=${OUTPUT_DIR} \
     --max_seq_length=${max_seq_length} \
