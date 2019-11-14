@@ -34,7 +34,7 @@ let batch_size="8"
 
 export XLA_FLAGS="--xla_gpu_cuda_data_dir=${CUDA_HOME}"
 
-python lm/train.py \
+python lm/finetune_mirrored.py \
     --config_file=lm/configs/${model_type}.json \
     --input_file=${input_file} \
     --output_dir=${OUTPUT_DIR} \
