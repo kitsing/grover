@@ -49,6 +49,7 @@ class GroverConfig(object):
                  hyper_normalize: bool = False,
                  sum_up_units: bool = False,
                  coupled: bool = False,
+                 reverse: bool = True,
                  scope_prefix='newslm'):
         """Constructs NewsConfig.
 
@@ -94,6 +95,7 @@ class GroverConfig(object):
         self.hyper_normalize = hyper_normalize
         self.sum_up_units = sum_up_units
         self.coupled = coupled
+        self.reverse = reverse
 
     @classmethod
     def from_dict(cls, json_object):
@@ -557,16 +559,23 @@ class GroverModelResidual(object):
 
         def get_loss(inp):
             orig = truncate(inp)
-            flipped = self.flip_before_eos(orig)
-            to_score = tf.concat((orig[:, :, None], flipped[:, :, None]), axis=2)
-            batch_size, seq_length, _ = get_shape_list(to_score, 3)
+            if self.config.reverse:
+                flipped = self.flip_before_eos(orig)
+                to_score = tf.concat((orig[:, :, None], flipped[:, :, None]), axis=2)
+                batch_size, seq_length, _ = get_shape_list(to_score, 3)
+                to_score_shape = (batch_size, seq_length, 2)
+            else:
+                to_score = orig
+                batch_size, seq_length = get_shape_list(to_score, 2)
+                to_score_shape = (batch_size, seq_length)
+
             if is_training and self.config.word_dropout_prob > 0.:
                 b = Bernoulli(probs=(1 - self.config.word_dropout_prob), dtype=tf.bool)
                 word_dropout_mask = b.sample(sample_shape=(batch_size, seq_length))
                 to_score = tf.where(word_dropout_mask[:, :, None],
                                     to_score,
                                     tf.fill(
-                                        (batch_size, seq_length, 2),
+                                        to_score_shape,
                                         self.pad_token_id)
                                     )
             if self.config.mask_padding:
@@ -589,9 +598,8 @@ class GroverModelResidual(object):
                                name_or_scope=scope):
             num_loss, residuals = get_num_loss()
             if not ignore_noise:
-                loss = num_loss + get_denom_loss()
+                self.loss = num_loss + get_denom_loss()
                 # loss = tf.cond(sampled_num_or_denom, get_num_loss, get_denom_loss)
-                self.loss = loss
             self.residuals = residuals
 
         # THE OUTPUT BIAS DOES NOT SPARK JOY
@@ -601,19 +609,24 @@ class GroverModelResidual(object):
     def score_seq(self, caches, config: GroverConfig, do_cache, is_training, label_weights, to_score,
                   reuse, original_batch_size, seq_length):
         with tf.variable_scope("embeddings"):
-            embeddings, embedding_table = embed(to_score[:, :, 0], config.vocab_size,
+            if config.reverse:
+                to_embed = to_score[:, :, 0]
+            else:
+                to_embed = to_score
+            embeddings, embedding_table = embed(to_embed, config.vocab_size,
                                                 config.hidden_size,
                                                 position_offset=self.cache_length,
                                                 initializer_range=config.initializer_range,
                                                 max_position_embeddings=config.max_position_embeddings,
                                                 use_one_hot_embeddings=True)
-            embeddings_2, _ = embed(to_score[:, :, 1], config.vocab_size,
-                                    config.hidden_size,
-                                    position_offset=self.cache_length,
-                                    initializer_range=config.initializer_range,
-                                    max_position_embeddings=config.max_position_embeddings,
-                                    use_one_hot_embeddings=True)
-            embeddings = embeddings + embeddings_2
+            if config.reverse:
+                embeddings_2, _ = embed(to_score[:, :, 1], config.vocab_size,
+                                        config.hidden_size,
+                                        position_offset=self.cache_length,
+                                        initializer_range=config.initializer_range,
+                                        max_position_embeddings=config.max_position_embeddings,
+                                        use_one_hot_embeddings=True)
+                embeddings = embeddings + embeddings_2
         if config.reuse_gen:
             # reusing the original model for embeddings. to ensure correctness we make use of the original masks
             mask = get_attention_mask(seq_length, seq_length + self.cache_length, dtype=embeddings.dtype)
@@ -649,10 +662,9 @@ class GroverModelResidual(object):
                 hidden_state = residual_mlp_layer(hidden_state + attention_output,
                                                   intermediate_size=config.intermediate_size,
                                                   hidden_dropout_prob=config.hidden_dropout_prob)
-        if self.config.reuse_gen:
-            raise NotImplementedError
+        if config.reuse_gen:
             # have to stop gradient here as we don't want to finetune the generator (or do we?)
-            hidden_state = tf.stop_gradient(hidden_state) * label_weights[:, None]
+            hidden_state = tf.stop_gradient(hidden_state)
             # start some additional layers
             if config.additional_transformer_layers > 0:
                 with tf.variable_scope("additional_embeddings"):
@@ -663,11 +675,11 @@ class GroverModelResidual(object):
                                                 initializer_range=config.initializer_range,
                                                 max_position_embeddings=config.max_position_embeddings,
                                                 use_one_hot_embeddings=True)
-                emb_shape = [original_batch_size * self.seq_length, config.hidden_size]
+                emb_shape = [original_batch_size * seq_length, config.hidden_size]
                 additional_emb = tf.reshape(add_embeddings, emb_shape)
                 hidden_state = tf.concat((hidden_state, additional_emb), axis=1)
                 # we are no longer subject to the left-context limitation so we have a full mask here
-                full_mask = tf.ones((self.seq_length, self.seq_length + self.cache_length), dtype=embeddings.dtype)
+                full_mask = tf.ones((seq_length, seq_length + self.cache_length), dtype=embeddings.dtype)
 
                 for additional_layer_idx in range(config.additional_transformer_layers):
                     with tf.variable_scope('additional_layer{:02d}'.format(additional_layer_idx)):
@@ -676,7 +688,7 @@ class GroverModelResidual(object):
                             hidden_state,
                             full_mask,
                             batch_size=original_batch_size,
-                            seq_length=self.seq_length,
+                            seq_length=seq_length,
                             size_per_head=config.hidden_size * 2 // config.num_attention_heads,
                             num_attention_heads=config.num_attention_heads,
                             initializer_range=config.initializer_range,
@@ -691,12 +703,6 @@ class GroverModelResidual(object):
                         hidden_state = residual_mlp_layer(hidden_state + attention_output,
                                                           intermediate_size=config.intermediate_size,
                                                           hidden_dropout_prob=config.hidden_dropout_prob)
-                hidden_state = tf.layers.dense(tf.layers.dropout(hidden_state,
-                                                                 rate=config.hidden_dropout_prob,
-                                                                 training=is_training),
-                                               config.hidden_size, name='additional_final_layer',
-                                               )
-                hidden_state = layer_norm(hidden_state, name='layer_normed_final_layer')
         if config.final_projection_layer:
             raise NotImplementedError
             residuals = tf.layers.dense(tf.layers.dropout(hidden_state, rate=config.hidden_dropout_prob,
