@@ -30,7 +30,7 @@ def get_tokens(token_file):
 
 
 def compute_prob_under_model(model_config, batch_size_per_chunk, num_gpus, seq_length,
-                             gen_ckpt, dis_ckpt, noise_model_config, sess):
+                             gen_ckpt, dis_ckpt, noise_ckpt, noise_model_config, sess, model_is_grover: bool = False):
     from sample.encoder import get_encoder
     from lm.modeling import GroverConfig, eval_seq
     from nce.utils import get_seq_probs
@@ -51,10 +51,10 @@ def compute_prob_under_model(model_config, batch_size_per_chunk, num_gpus, seq_l
             # actual examples
             tokens = tf.placeholder(tf.int32, [batch_size_per_chunk, seq_length])
             all_tokens.append(tokens)
-            probs = tf.stop_gradient(eval_seq(news_config, tokens, 1., baseline=False,
+            probs = tf.stop_gradient(eval_seq(news_config, tokens, 1., baseline=model_is_grover, gen_scope='gen',
                                               ignore_ids=ignore_ids, gen_config=noise_news_config))
             all_probs.append(probs)
-            noise_probs = tf.stop_gradient(eval_seq(noise_news_config, tokens, 1., baseline=True,
+            noise_probs = tf.stop_gradient(eval_seq(noise_news_config, tokens, 1., baseline=True, gen_scope='noise',
                                                     ignore_ids=ignore_ids, gen_config=noise_news_config))
             all_probs_under_noise.append(noise_probs)
 
@@ -63,7 +63,9 @@ def compute_prob_under_model(model_config, batch_size_per_chunk, num_gpus, seq_l
         merged_noise_probs = tf.concat(all_probs_under_noise, axis=0)
 
     restore('gen', gen_ckpt, sess)
-    restore('dis', dis_ckpt, sess)
+    restore('noise', noise_ckpt, sess)
+    if not model_is_grover:
+        restore('dis', dis_ckpt, sess)
 
     probs_under_model = lambda inp: get_seq_probs(seqs=inp,
                                                   batch_size=batch_size_per_chunk * num_gpus,
@@ -86,7 +88,9 @@ def main():
     parser.add_argument('--seq-length', default=1025, type=int)
     parser.add_argument('--num-gpus', default=8, type=int)
     parser.add_argument('--gen-ckpt', default='/checkpoint/kitsing/grover-models/base/model.ckpt')
+    parser.add_argument('--noise-ckpt', default='/checkpoint/kitsing/grover-models/base/model.ckpt')
     parser.add_argument('--dis-ckpt', default='/checkpoint/kitsing/grover-models/base/model.ckpt')
+    parser.add_argument('--model-is-grover', action='store_true')
     args = parser.parse_args()
     from glob import glob
     noise_files = glob(args.noises)
@@ -98,7 +102,8 @@ def main():
         compute_prob = compute_prob_under_model(args.model_config,
                                                 args.batch_size, args.num_gpus,
                                                 args.seq_length, args.gen_ckpt,
-                                                args.dis_ckpt, args.noise_model_config, sess)
+                                                args.dis_ckpt, args.noise_ckpt,
+                                                args.noise_model_config, sess, model_is_grover=args.model_is_grover)
         noise_probs = compute_prob(noise_tokens)
         noise_probs_under_model, noise_probs_under_noise = tuple(noise_probs)
         inp_probs_under_model, inp_probs_under_noise = tuple(compute_prob(inp_tokens))
