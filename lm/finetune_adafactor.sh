@@ -2,9 +2,9 @@
 
 export PYTHONPATH=$(pwd)
 
-learning_rate=1.25e-5
+learning_rate=1e-4
 max_seq_length=1024
-save_checkpoint_steps=200
+save_checkpoint_steps=100
 
 # You can customize the training here
 # mega, medium, or base
@@ -27,7 +27,7 @@ fi
 
 
 # there are 20k * 1024 examples so this translates to 20 epochs. seems ok and i can run for more if needed
-num_train_steps=855000
+num_train_steps=852000
 
 # Make sure batch size scales.
 let batch_size="8"
