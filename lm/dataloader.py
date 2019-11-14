@@ -211,7 +211,7 @@ def input_fn_builder(input_files,
                      evaluate_for_fixed_number_of_steps=True):
     """Creates an `input_fn` closure to be passed to TPUEstimator."""
 
-    def input_fn(params):
+    def input_fn(params, input_context: tf.distribute.InputContext = None):
         """The actual input function."""
         batch_size = params["batch_size"]
         name_to_features = {
@@ -222,6 +222,9 @@ def input_fn_builder(input_files,
         # For eval, we want no shuffling and parallel reading doesn't matter.
         if is_training:
             d = tf.data.Dataset.from_tensor_slices(tf.constant(input_files))
+            if input_context is not None:
+                d = d.shard(input_context.num_input_pipelines,
+                            input_context.input_pipeline_id)
             d = d.repeat()
             d = d.shuffle(buffer_size=len(input_files))
 
