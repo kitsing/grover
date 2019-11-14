@@ -140,7 +140,7 @@ def main(_):
             tf_random_seed=FLAGS.seed,
             keep_checkpoint_max=0,),
         model_dir=model_dir,
-        params={'model_dir': model_dir}
+        params={'model_dir': model_dir, 'batch_size': FLAGS.train_batch_size}
     )
 
     tf.logging.info("***** Running training *****")
