@@ -42,6 +42,7 @@ export XLA_FLAGS="--xla_gpu_cuda_data_dir=${CUDA_HOME}"
 set -o noglob
 RUN_STRING="python lm/eval_cloze.py \
 --model-config-fn lm/configs/${model_type}.json \
+--noise-model-config-fn lm/configs/${gen_model_type}.json \
 --gen-model-ckpt /checkpoint/kitsing/grover-models/${gen_model_type}/model.ckpt \
 --dis-model-ckpt ${DIS_MODEL_CKPT} \
 --batch-size ${batch_size} \
