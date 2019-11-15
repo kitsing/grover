@@ -77,8 +77,10 @@ encoder = get_encoder()
 news_config = GroverConfig.from_json_file(args.model_config_fn)
 noise_news_config = GroverConfig.from_json_file(args.noise_model_config_fn)
 
-print('start: {}'.format(encoder.__dict__['begin_article']))
-print('end: {}'.format(encoder.__dict__['end_article']))
+tf.logging.info(f'args: {args}')
+
+tf.logging.info('start: {}'.format(encoder.__dict__['begin_article']))
+tf.logging.info('end: {}'.format(encoder.__dict__['end_article']))
 
 tf_config = tf.ConfigProto(allow_soft_placement=True)
 
