@@ -1216,8 +1216,22 @@ def initialize_from_context(initial_context, ignore_ids, news_config, p_for_topp
 
 
 def eval_seq(news_config: GroverConfig, tokens, correction_factor = 1., baseline: bool = False, gen_scope='gen',
-             ignore_ids: Optional = None, gen_config: Optional[GroverConfig] = None):
+             ignore_ids: Optional = None, gen_config: Optional[GroverConfig] = None, discriminator_only: bool = False):
+    assert not (baseline and discriminator_only)
     with tf.name_scope('evaluate_sequence'):
+        if discriminator_only:
+            residual_model = GroverModelResidual(
+                config=news_config,
+                is_training=False,
+                input_ids=tokens,
+                reuse=tf.AUTO_REUSE,
+                noises=None,
+                pad_token_id=news_config.pad_token_id,
+                ignore_noise=True,
+                scope='dis', ignore_ids=ignore_ids
+            )
+            return residual_model.residuals
+
         if gen_config is None:
             gen_config = news_config
         gen_model = GroverModel(
