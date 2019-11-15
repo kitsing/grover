@@ -67,7 +67,7 @@ def main():
                                       args.seq_length,
                                       args.dis_ckpt,
                                       sess)
-        gs_under_model = compute_g(noise_tokens)
+        gs_under_model = compute_g(noise_tokens)[0]
     print(np.exp(logsumexp(gs_under_model) - np.log(float(gs_under_model.shape[0]))))
 
 
