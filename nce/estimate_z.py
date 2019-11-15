@@ -6,7 +6,7 @@ from nce.eval_nce_against_baseline import get_dirty_noises
 from sample.encoder import get_encoder
 
 def get_g_under_model(model_config, batch_size_per_chunk, num_gpus, seq_length,
-                      dis_ckpt, sess, model_is_grover: bool = False):
+                      dis_ckpt, sess):
     from sample.encoder import get_encoder
     from lm.modeling import GroverConfig, eval_seq
     from nce.utils import get_seq_probs
@@ -25,7 +25,7 @@ def get_g_under_model(model_config, batch_size_per_chunk, num_gpus, seq_length,
             # actual examples
             tokens = tf.placeholder(tf.int32, [batch_size_per_chunk, seq_length])
             all_tokens.append(tokens)
-            gs = tf.stop_gradient(eval_seq(news_config, tokens, 1., baseline=model_is_grover, gen_scope='gen',
+            gs = tf.stop_gradient(eval_seq(news_config, tokens, 1., baseline=False,
                                            ignore_ids=ignore_ids, discriminator_only=True))
             all_gs.append(gs)
 
