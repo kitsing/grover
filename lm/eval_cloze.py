@@ -17,14 +17,14 @@ parser = argparse.ArgumentParser(description='Evaluation')
 parser.add_argument(
     '--model-config-fn',
     dest='model_config_fn',
-    default='../lm/configs/base.json',
+    default='lm/configs/base.json',
     type=str,
     help='Configuration JSON for the model',
 )
 parser.add_argument(
     '--noise-model-config-fn',
     dest='noise_model_config_fn',
-    default='../lm/configs/base.json',
+    default='lm/configs/base.json',
     type=str,
     help='Configuration JSON for the model',
 )
