@@ -138,7 +138,7 @@ def main(_):
             session_config=run_config,
             train_distribute=strategy,
             tf_random_seed=FLAGS.seed,
-            keep_checkpoint_max=0,),
+            keep_checkpoint_max=0, save_checkpoints_steps=100),
         model_dir=model_dir,
         params={'model_dir': model_dir, 'batch_size': FLAGS.train_batch_size}
     )
