@@ -4,8 +4,6 @@ import numpy as np
 import tensorflow as tf
 from tqdm import tqdm
 
-from nce.gen_noise_samples import args
-
 
 def restore(scope, checkpoint, sess):
     vars = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope=scope)
