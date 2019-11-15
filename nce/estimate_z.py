@@ -2,7 +2,8 @@
 import numpy as np
 from scipy.special import logsumexp
 import tensorflow as tf
-from nce.eval_nce_against_baseline import get_all_noises
+from nce.eval_nce_against_baseline import get_dirty_noises
+from sample.encoder import get_encoder
 
 def get_g_under_model(model_config, batch_size_per_chunk, num_gpus, seq_length,
                       dis_ckpt, sess, model_is_grover: bool = False):
@@ -54,8 +55,10 @@ def main():
     parser.add_argument('--dis-ckpt', default='/checkpoint/kitsing/grover-models/base/model.ckpt')
     args = parser.parse_args()
     from glob import glob
+    encoder = get_encoder()
     noise_files = glob(args.noises)
-    noise_tokens, _ = get_all_noises(noise_files)
+    noise_tokens = get_dirty_noises(noise_files, eoa=encoder.__dict__['end_article'],
+                                    pad=encoder.padding, seq_length=args.seq_length)
     print(f'noise shape: {noise_tokens.shape}')
     tf_config = tf.ConfigProto(allow_soft_placement=True)
     with tf.Session(config=tf_config, graph=tf.Graph()) as sess:

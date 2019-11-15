@@ -24,6 +24,16 @@ def get_all_noises(noise_files):
     return np.concatenate(all_noises, axis=0), np.concatenate(all_noise_probs, axis=0)
 
 
+def get_dirty_noises(noise_files, eoa, pad, seq_length):
+    from nce.utils import get_clean_noise_chunk
+    all_noises = []
+    for f in noise_files:
+        loaded_noise = np.load(f)
+        clean_noise, _, _ = get_clean_noise_chunk(loaded_noise['tokens'], eoa=eoa, padding=pad, seq_length=seq_length)
+        all_noises.append(clean_noise)
+    return np.concatenate(all_noises, axis=0)
+
+
 def get_tokens(token_file):
     with np.load(token_file) as f:
         return f['tokens']

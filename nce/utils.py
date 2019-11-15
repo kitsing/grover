@@ -4,6 +4,9 @@ import numpy as np
 import tensorflow as tf
 from tqdm import tqdm
 
+from nce.gen_noise_samples import args
+
+
 def restore(scope, checkpoint, sess):
     vars = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope=scope)
     checkpoint_vars = tf.train.list_variables(checkpoint)
@@ -71,3 +74,12 @@ def get_seq_probs(seqs, batch_size, token_place_holders, num_gpus, tf_outputs, i
         for o,p in zip(outputs,probs_out):
             o.append(p)
     return tuple([np.concatenate(o, axis=0).reshape((-1,))[:seqs.shape[0]] for o in outputs])
+
+
+def get_clean_noise_chunk(noise_token_chunk, eoa, padding, seq_length):
+    eos_positions = np.argmax(noise_token_chunk == eoa, axis=1)
+    valid_seqs = (eos_positions != 0)
+    mask = np.tile(np.arange(seq_length, dtype=np.int32)[None, :], (eos_positions.shape[0], 1))
+    masked = mask <= eos_positions[:, None]
+    noise_token_chunk = np.where(masked, noise_token_chunk, padding)[valid_seqs]
+    return noise_token_chunk, valid_seqs, masked

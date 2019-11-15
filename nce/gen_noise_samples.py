@@ -2,18 +2,15 @@ import tensorflow as tf
 import numpy as np
 import sys
 import argparse
-from glob import glob
 
 sys.path.append('../')
 from lm.modeling import GroverConfig, sample
 from sample.encoder import get_encoder
 from tqdm import tqdm
 from os import environ
-from os.path import basename
 from random import seed as rnd_seed
-from scipy.special import logsumexp
 from math import ceil
-from nce.utils import restore
+from nce.utils import restore, get_clean_noise_chunk
 
 parser = argparse.ArgumentParser(description='Evaluation')
 
@@ -64,7 +61,8 @@ encoder = get_encoder()
 noise_news_config = GroverConfig.from_json_file(args.noise_model_config_fn)
 
 print('start: {}'.format(encoder.__dict__['begin_article']))
-print('end: {}'.format(encoder.__dict__['end_article']))
+eoa = encoder.__dict__['end_article']
+print('end: {}'.format(eoa))
 
 tf_config = tf.ConfigProto(allow_soft_placement=True)
 
@@ -82,7 +80,7 @@ with tf.Session(config=tf_config, graph=tf.Graph()) as sess:
     eos_token = tf.placeholder(tf.int32, [])
     ignore_ids = tf.placeholder(tf.bool, [noise_news_config.vocab_size])
     ignore_ids_np = np.array(encoder.special_tokens_onehot)
-    ignore_ids_np[encoder.__dict__['end_article']] = 0
+    ignore_ids_np[eoa] = 0
     for i in range(args.num_gpus):
         with tf.device('/gpu:' + str(i)):
             # sampled noises
@@ -105,17 +103,15 @@ with tf.Session(config=tf_config, graph=tf.Graph()) as sess:
         noise_token_chunk, noise_prob_chunk = sess.run([merged_sampled_tokens, merged_sampled_probs],
                                                        feed_dict={
                                                            initial_context: [context_formatted] * batch_size_per_chunk,
-                                                           eos_token: encoder.__dict__['end_article'],
+                                                           eos_token: eoa,
                                                            ignore_ids: ignore_ids_np,
                                                            p_for_topp: np.ones((batch_size_per_chunk,),
                                                                                dtype=np.float32)}
                                                        )
-        eos_positions = np.argmax(noise_token_chunk == encoder.__dict__['end_article'], axis=1)
-        valid_seqs = (eos_positions != 0)
-        mask = np.tile(np.arange(1025, dtype=np.int32)[None, :], (eos_positions.shape[0], 1))
-        masked = mask <= eos_positions[:, None]
-        noise_token_chunk = np.where(masked, noise_token_chunk, encoder.padding)[valid_seqs]
-        noise_token_chunks.append(noise_token_chunk)
+        clean_noise_token_chunk, valid_seqs, masked = get_clean_noise_chunk(noise_token_chunk, eoa=eoa,
+                                                                            padding=encoder.padding,
+                                                                            seq_length=args.seq_length)
+        noise_token_chunks.append(clean_noise_token_chunk)
 
         prob_mask = masked[:, 1:]
         prob_masked = (prob_mask * noise_prob_chunk)[valid_seqs]
