@@ -9,7 +9,7 @@ from lm.modeling import GroverConfig, eval_seq
 from sample.encoder import get_encoder
 from tqdm import tqdm
 from os import environ
-from os.path import basename
+from os.path import basename, dirname
 from random import seed as rnd_seed
 from math import ceil
 from nce.utils import restore
@@ -111,7 +111,7 @@ with tf.Session(config=tf_config, graph=tf.Graph()) as sess:
     for f in tqdm(our_files, disable=None):
         from math import ceil
         from os.path import exists
-        output_fname = f'{args.output_path}/{basename(f)}.out.npz'
+        output_fname = f'{dirname(f)}/{basename(f)}.out.npz'
         if exists(f'{output_fname}'):
             tf.logging.info(f'{output_fname} already exists. skipping...')
             continue

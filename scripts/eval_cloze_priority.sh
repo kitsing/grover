@@ -27,7 +27,7 @@ DIS_MODEL_CKPT=${2}
 model_type=${3}
 gen_model_type="base"
 #input_dev_file='/checkpoint/kitsing/grover/cloze/preprocessed_val0[0-5]*.tfrecord.npz'
-input_dev_file='/checkpoint/kitsing/grover/cloze/preprocessed_val00[0-9]*.tfrecord.npz'
+input_dev_file='/checkpoint/kitsing/grover/cloze/{22,32,42}/preprocessed_val00[0-9]*.tfrecord.npz'
 
 # Make sure batch size scales.
 let batch_size=160

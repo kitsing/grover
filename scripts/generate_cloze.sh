@@ -20,13 +20,14 @@
 ## notify 10 minutes before job is killed so we can requeue
 
 CLOZE_PATH=/checkpoint/kitsing/grover/cloze
+CHOICE=${1}
 ON_CLUSTER=1
 
 mkdir -p "${CLOZE_PATH}"
 export PYTHONPATH=$(pwd)
 RUN_STRING="bash cloze/generate_cloze_helper.sh \
             ${CLOZE_PATH}/ \
-            42 val"
+            ${CHOICE} val"
 
 echo "${RUN_STRING}"
 if [[ ${ON_CLUSTER} -eq 1 ]]; then
