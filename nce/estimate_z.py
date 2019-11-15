@@ -53,6 +53,7 @@ def main():
     parser.add_argument('--seq-length', default=1025, type=int)
     parser.add_argument('--num-gpus', default=8, type=int)
     parser.add_argument('--dis-ckpt', default='/checkpoint/kitsing/grover-models/base/model.ckpt')
+    parser.add_argument('--output-path', default=None, type=str)
     args = parser.parse_args()
     from glob import glob
     encoder = get_encoder()
@@ -68,6 +69,8 @@ def main():
                                       args.dis_ckpt,
                                       sess)
         gs_under_model = compute_g(noise_tokens)[0]
+    if args.output_path is not None:
+        np.savez(f'{args.output_path}', gs=gs_under_model)
     print(np.exp(logsumexp(gs_under_model) - np.log(float(gs_under_model.shape[0]))))
 
 
