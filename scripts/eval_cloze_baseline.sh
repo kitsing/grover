@@ -22,10 +22,11 @@
 export PYTHONPATH=$(pwd)
 
 model_type="base"
-OUTPUT_DIR=${1} # put your output directory here
+OUTPUT_DIR=${1}/${3} # put your output directory here
 mkdir -p ${OUTPUT_DIR}
 GEN_MODEL=${2}
-input_dev_file='/checkpoint/kitsing/grover/cloze/preprocessed_val0[0-5]*.tfrecord.npz'
+choice=${3}
+input_dev_file="/checkpoint/kitsing/grover/cloze/${choice}/preprocessed_val00[0-9]*.tfrecord.npz"
 
 # Make sure batch size scales.
 let batch_size=160
