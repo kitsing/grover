@@ -50,6 +50,7 @@ class GroverConfig(object):
                  sum_up_units: bool = False,
                  coupled: bool = False,
                  reverse: bool = True,
+                 gelu_capping: bool = False,
                  scope_prefix='newslm'):
         """Constructs NewsConfig.
 
@@ -96,6 +97,7 @@ class GroverConfig(object):
         self.sum_up_units = sum_up_units
         self.coupled = coupled
         self.reverse = reverse
+        self.gelu_capping = gelu_capping
 
     @classmethod
     def from_dict(cls, json_object):
@@ -733,7 +735,8 @@ class GroverModelResidual(object):
                     logprobs_flat = logits_flat
                 selected_and_masked = label_weights * tf.reduce_sum(logprobs_flat * one_hot_labels, axis=[-1])
                 residuals = tf.reduce_sum(tf.reshape(selected_and_masked, (-1, seq_length)), axis=[-1])
-
+        if config.gelu_capping:
+            residuals = - gelu(residuals)
         return residuals
 
     def reg_g_loss(self):
