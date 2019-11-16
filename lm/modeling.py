@@ -50,7 +50,8 @@ class GroverConfig(object):
                  sum_up_units: bool = False,
                  coupled: bool = False,
                  reverse: bool = True,
-                 gelu_capping: bool = False,
+                 capping_offset: float = 0.,
+                 capping_method = 'none',
                  scope_prefix='newslm'):
         """Constructs NewsConfig.
 
@@ -97,7 +98,14 @@ class GroverConfig(object):
         self.sum_up_units = sum_up_units
         self.coupled = coupled
         self.reverse = reverse
-        self.gelu_capping = gelu_capping
+        self.capping_offset = capping_offset
+        self.capping_method = capping_method
+        self.softplus_capping = False
+        self.gelu_capping = False
+        if self.capping_method == 'gelu':
+            self.gelu_capping = True
+        elif self.capping_method == 'softplus':
+            self.softplus_capping = True
 
     @classmethod
     def from_dict(cls, json_object):
@@ -735,8 +743,11 @@ class GroverModelResidual(object):
                     logprobs_flat = logits_flat
                 selected_and_masked = label_weights * tf.reduce_sum(logprobs_flat * one_hot_labels, axis=[-1])
                 residuals = tf.reduce_sum(tf.reshape(selected_and_masked, (-1, seq_length)), axis=[-1])
+        capping_amount = - residuals + config.capping_offset
         if config.gelu_capping:
-            residuals = - gelu(- residuals)
+            residuals = - gelu(capping_amount)
+        elif config.softplus_capping:
+            residuals = - tf.nn.softplus(capping_amount)
 
         return residuals
 

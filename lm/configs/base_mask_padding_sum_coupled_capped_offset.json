@@ -15,5 +15,6 @@
   "hyper_normalize": false,
   "coupled": true,
   "capping_method": "gelu",
+  "capping_offset": -20,
   "reverse": true
 }

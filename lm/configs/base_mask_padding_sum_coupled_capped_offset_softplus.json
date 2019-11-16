@@ -14,6 +14,7 @@
   "sum_up_units": true,
   "hyper_normalize": false,
   "coupled": true,
-  "capping_method": "gelu",
+  "capping_method": "softplus",
+  "capping_offset": 0.6931471806,
   "reverse": true
 }
