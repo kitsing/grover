@@ -15,5 +15,5 @@
   "hyper_normalize": false,
   "coupled": true,
   "gelu_capping": true,
-  "reverse": true
+  "reverse": false
 }
