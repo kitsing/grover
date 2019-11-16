@@ -720,6 +720,8 @@ class GroverModelResidual(object):
                 logits_flat = hidden_state
                 if config.hyper_normalize:
                     logits_flat = tf.nn.log_softmax(logits_flat, axis=-1)
+                if config.gelu_capping:
+                    logits_flat = - gelu(logits_flat)
                 logits_flat = logits_flat * label_weights[:, None]
                 residuals = tf.reduce_sum(tf.reshape(logits_flat, (original_batch_size, seq_length, -1)),
                                           axis=[1,2])
@@ -735,8 +737,9 @@ class GroverModelResidual(object):
                     logprobs_flat = logits_flat
                 selected_and_masked = label_weights * tf.reduce_sum(logprobs_flat * one_hot_labels, axis=[-1])
                 residuals = tf.reduce_sum(tf.reshape(selected_and_masked, (-1, seq_length)), axis=[-1])
-        if config.gelu_capping:
-            residuals = - gelu(residuals)
+                if config.gelu_capping:
+                    residuals = - gelu(residuals)
+
         return residuals
 
     def reg_g_loss(self):
