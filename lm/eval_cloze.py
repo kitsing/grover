@@ -111,7 +111,7 @@ with tf.Session(config=tf_config, graph=tf.Graph()) as sess:
     for f in tqdm(our_files, disable=None):
         from math import ceil
         from os.path import exists
-        output_fname = f'{dirname(f)}/{basename(f)}.out.npz'
+        output_fname = f'{args.output_path}/{basename(f)}.out.npz'
         if exists(f'{output_fname}'):
             tf.logging.info(f'{output_fname} already exists. skipping...')
             continue

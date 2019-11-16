@@ -21,13 +21,14 @@
 #SBATCH --comment="acl 2020 submission: need this quick evaluation to decide whether we stop training one particular variant"
 export PYTHONPATH=$(pwd)
 
-OUTPUT_DIR=${1} # put your output directory here
-mkdir -p ${OUTPUT_DIR}
+OUTPUT_DIR=${1}/${4} # put your output directory here
 DIS_MODEL_CKPT=${2}
 model_type=${3}
+choice=${4}
+mkdir -p ${OUTPUT_DIR}
 gen_model_type="base"
 #input_dev_file='/checkpoint/kitsing/grover/cloze/preprocessed_val0[0-5]*.tfrecord.npz'
-input_dev_file='/checkpoint/kitsing/grover/cloze/{22,32,42}/preprocessed_val00[0-9]*.tfrecord.npz'
+input_dev_file='/checkpoint/kitsing/grover/cloze/${choice}/preprocessed_val00[0-9]*.tfrecord.npz'
 
 # Make sure batch size scales.
 let batch_size=160
