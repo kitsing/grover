@@ -28,7 +28,7 @@ choice=${4}
 mkdir -p ${OUTPUT_DIR}
 gen_model_type="base"
 #input_dev_file='/checkpoint/kitsing/grover/cloze/preprocessed_val0[0-5]*.tfrecord.npz'
-input_dev_file='/checkpoint/kitsing/grover/cloze/${choice}/preprocessed_val00[0-9]*.tfrecord.npz'
+input_dev_file="/checkpoint/kitsing/grover/cloze/${choice}/preprocessed_val00[0-9]*.tfrecord.npz"
 
 # Make sure batch size scales.
 let batch_size=160
