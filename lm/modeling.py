@@ -582,7 +582,11 @@ class GroverModelResidual(object):
             if is_training and self.config.word_dropout_prob > 0.:
                 b = Bernoulli(probs=(1 - self.config.word_dropout_prob), dtype=tf.bool)
                 word_dropout_mask = b.sample(sample_shape=(batch_size, seq_length))
-                to_score = tf.where(word_dropout_mask[:, :, None],
+                if self.config.reverse:
+                    tiled = tf.tile(word_dropout_mask[:, :, None], (1, 1, 2))
+                else:
+                    tiled = word_dropout_mask
+                to_score = tf.where(tiled,
                                     to_score,
                                     tf.fill(
                                         to_score_shape,
