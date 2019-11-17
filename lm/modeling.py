@@ -102,10 +102,13 @@ class GroverConfig(object):
         self.capping_method = capping_method
         self.softplus_capping = False
         self.gelu_capping = False
+        self.tanh_capping = False
         if self.capping_method == 'gelu':
             self.gelu_capping = True
         elif self.capping_method == 'softplus':
             self.softplus_capping = True
+        elif self.capping_method == 'tanh':
+            self.tanh_capping = True
 
     @classmethod
     def from_dict(cls, json_object):
@@ -752,6 +755,8 @@ class GroverModelResidual(object):
             residuals = - gelu(capping_amount)
         elif config.softplus_capping or config.capping_method == 'softplus':
             residuals = - tf.nn.softplus(capping_amount)
+        elif config.tanh_capping or config.capping_method == 'tanh':
+            residuals = - 2 * tf.nn.tanh(capping_amount)
         else:
             assert False
 
