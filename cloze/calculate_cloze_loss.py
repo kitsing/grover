@@ -33,13 +33,14 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--prob-path', default='./')
     parser.add_argument('--cloze-path', default='./*')
+    parser.add_argument('--force', action='store_true')
 
     args = parser.parse_args()
     cloze_files = glob(args.cloze_path)
 
     for f in tqdm(cloze_files):
         try:
-            output_loss(f, ignored=ignore_ids_np, prob_path=args.prob_path)
+            output_loss(f, ignored=ignore_ids_np, prob_path=args.prob_path, force=args.force)
         except FileNotFoundError as e:
             pass
 

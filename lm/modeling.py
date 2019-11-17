@@ -51,7 +51,7 @@ class GroverConfig(object):
                  coupled: bool = False,
                  reverse: bool = True,
                  capping_offset: float = 0.,
-                 capping_method = 'none',
+                 capping_method: str = 'none',
                  scope_prefix='newslm'):
         """Constructs NewsConfig.
 
@@ -744,10 +744,12 @@ class GroverModelResidual(object):
                 selected_and_masked = label_weights * tf.reduce_sum(logprobs_flat * one_hot_labels, axis=[-1])
                 residuals = tf.reduce_sum(tf.reshape(selected_and_masked, (-1, seq_length)), axis=[-1])
         capping_amount = - residuals + config.capping_offset
-        if config.gelu_capping:
+        if config.capping_method == 'gelu' or config.gelu_capping:
             residuals = - gelu(capping_amount)
-        elif config.softplus_capping:
+        elif config.softplus_capping or config.capping_method == 'softplus':
             residuals = - tf.nn.softplus(capping_amount)
+        else:
+            assert False
 
         return residuals
 
