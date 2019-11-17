@@ -2,7 +2,7 @@
 import numpy as np
 import tensorflow as tf
 from nce.estimate_z import get_g_under_model
-
+from sample.encoder import get_encoder
 
 def get_tokens(token_file):
     with np.load(token_file) as f:
@@ -18,8 +18,11 @@ def main():
     parser.add_argument('--seq-length', default=1025, type=int)
     parser.add_argument('--num-gpus', default=8, type=int)
     parser.add_argument('--dis-ckpt', default='/checkpoint/kitsing/grover-models/base/model.ckpt')
+    parser.add_argument('--z', default=1., type=float)
     args = parser.parse_args()
+    encoder = get_encoder()
     inp_tokens = get_tokens(args.inp)
+    word_count = np.sum(inp_tokens[:, 1:] != encoder.padding)
     tf_config = tf.ConfigProto(allow_soft_placement=True)
     with tf.Session(config=tf_config, graph=tf.Graph()) as sess:
         compute_prob = get_g_under_model(model_config=args.model_config,
@@ -30,7 +33,10 @@ def main():
                                          sess=sess, )
         inp_probs_under_model, = tuple(compute_prob(inp_tokens))
 
-    print(np.mean(inp_probs_under_model))
+    geo_mean_r = np.mean(inp_probs_under_model)
+    s_w_ratio = (inp_tokens.shape[0] / word_count)
+    ppl_reduction = np.exp( s_w_ratio * (np.log(args.z) - geo_mean_r) )
+    print(ppl_reduction)
 
 
 if __name__ == '__main__':
