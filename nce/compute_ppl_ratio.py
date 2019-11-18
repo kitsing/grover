@@ -19,6 +19,7 @@ def main():
     parser.add_argument('--num-gpus', default=8, type=int)
     parser.add_argument('--dis-ckpt', default='/checkpoint/kitsing/grover-models/base/model.ckpt')
     parser.add_argument('--z', default=1., type=float)
+    parser.add_argument('--sentence-level', action='store_true')
     args = parser.parse_args()
     encoder = get_encoder()
     inp_tokens = get_tokens(args.inp)
@@ -34,7 +35,10 @@ def main():
         inp_probs_under_model, = tuple(compute_prob(inp_tokens))
 
     geo_mean_r = np.mean(inp_probs_under_model)
-    s_w_ratio = (inp_tokens.shape[0] / word_count)
+    if args.sentence_level:
+        s_w_ratio = 1.
+    else:
+        s_w_ratio = (inp_tokens.shape[0] / word_count)
     ppl_reduction = np.exp( s_w_ratio * (np.log(args.z) - geo_mean_r) )
     print(ppl_reduction)
 
