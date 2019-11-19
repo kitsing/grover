@@ -58,13 +58,7 @@ parser.add_argument(
     type=int,
     help='Max sequence length',
 )
-
-parser.add_argument(
-    '-add_extra_articles_to_end',
-    dest='add_extra_articles_to_end',
-    action='store_true',
-    help='Whether to minimize padding by adding extra articles to the end',
-)
+parser.add_argument('--april-test-data', action='store_true')
 
 args = parser.parse_args()
 import os
@@ -76,6 +70,8 @@ encoder = get_encoder()
 
 class S3TFRecordWriter(object):
     def __init__(self, fn):
+        if fn is None:
+            return
         self.fn = fn
         if fn.startswith('s3://'):
             from boto3.s3.transfer import TransferConfig
@@ -136,13 +132,17 @@ class S3TFRecordWriter(object):
         self.close()
 
 
-def article_only_iterator(encoder, final_desired_size=1025):
+def article_only_iterator(encoder, final_desired_size=1025, april_test_data: bool = False):
     """ Iterate through the provided filename + tokenize"""
     assert os.path.exists(args.input_fn)
     with open(args.input_fn, 'r') as f:
         for l_no, l in enumerate(f):
             if l_no % args.num_folds == args.fold:
                 a = json.loads(l)
+                if april_test_data:
+                    assert 'label' in a
+                    if a['label'] != 'human':
+                        continue
                 a['input_ids'] = tokenize_for_grover_training(encoder, a, desired_size=final_desired_size,
                                                               unconditional_prob=1., metadata_dropout_prob=1.,
                                                               cut_prob=0., drop_metadata_when_unconditional=True)
@@ -153,7 +153,8 @@ def article_only_iterator(encoder, final_desired_size=1025):
                 yield a
 
 
-def unbuffered_and_sliding_window_article_iterator(encoder, final_desired_size=1025):
+def unbuffered_and_sliding_window_article_iterator(encoder, final_desired_size=1025,
+                                                   skip_non_human_articles: bool = False):
     """
 
     :param encoder:
@@ -161,7 +162,8 @@ def unbuffered_and_sliding_window_article_iterator(encoder, final_desired_size=1
     :return:
     """
 
-    for a in article_only_iterator(encoder, final_desired_size=final_desired_size):
+    for a in article_only_iterator(encoder, final_desired_size=final_desired_size,
+                                   april_test_data=skip_non_human_articles):
         yield just_pad(a, max_seq_length=final_desired_size, pad_token=encoder.padding)
 
 
@@ -169,11 +171,24 @@ def unbuffered_and_sliding_window_article_iterator(encoder, final_desired_size=1
 total_written = 0
 train_file = args.base_fn + 'train{:04d}.tfrecord'.format(args.fold)
 val_file = args.base_fn + 'val{:04d}.tfrecord'.format(args.fold)
+if args.april_test_data:
+    test_file = args.base_fn + 'test{:04d}.tfrecord'.format(args.fold)
+else:
+    test_file = None
 print('train: {} val: {}'.format(train_file, val_file))
-with S3TFRecordWriter(train_file) as train_writer, S3TFRecordWriter(val_file) as val_writer:
+with S3TFRecordWriter(train_file) as train_writer, S3TFRecordWriter(val_file) as val_writer, \
+        S3TFRecordWriter(test_file) as test_writer:
     for article in unbuffered_and_sliding_window_article_iterator(encoder,
-                                                                  final_desired_size=max(args.max_seq_length + 1, 1025)):
-        writer2use = train_writer if article['split'] == 'train' else val_writer
+                                                                  final_desired_size=max(args.max_seq_length + 1, 1025),
+                                                                  skip_non_human_articles=args.april_test_data):
+        if article['split'] == 'train':
+            writer2use = train_writer
+        elif article['split'] == 'val':
+            writer2use = val_writer
+        elif article['split'] == test_writer:
+            writer2use = test_file
+        else:
+            raise NotImplementedError
         assert len(article['input_ids']) == (args.max_seq_length + 1)
 
         features = collections.OrderedDict()
