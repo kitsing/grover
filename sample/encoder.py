@@ -202,9 +202,12 @@ def _tokenize_article_pieces(encoder, item, april_test_data: bool = False):
         article_pieces['date'] = [encoder.begin_date] + encoder.encode(date_txt) + [encoder.end_date]
 
     # 6/6: authors
-    authors = ', '.join(item['authors'])
-    if len(authors) > 5:
-        article_pieces['authors'] = [encoder.begin_authors] + encoder.encode(authors) + [encoder.end_authors]
+    if not april_test_data:
+        authors = ', '.join(item['authors'])
+        if len(authors) > 5:
+            article_pieces['authors'] = [encoder.begin_authors] + encoder.encode(authors) + [encoder.end_authors]
+    else:
+        article_pieces['authors'] = [encoder.begin_authors] + encoder.encode(item['authors']) + [encoder.end_authors]
     return article_pieces
 
 
