@@ -159,7 +159,7 @@ def get_encoder():
 ##############################################################
 # TURN SOMETHING INTO THE RIGHT FORMAT FOR AN EXAMPLE
 ##############################################################
-def _tokenize_article_pieces(encoder, item):
+def _tokenize_article_pieces(encoder, item, april_test_data: bool = False):
     """
     Turn the article into tokens
     NOTE: in hindsight I kinda messed up here because the first token is always represented as a BPE continuation
@@ -171,9 +171,12 @@ def _tokenize_article_pieces(encoder, item):
     fields are ['domain', 'date', 'authors', 'title', 'article', 'summary']
     :return: dict
     """
-    assert 'text' in item, f'{item}'
+    if april_test_data:
+        encoded_article = encoder.encode(item['article'])
+    else:
+        encoded_article = encoder.encode(item['text'])
     article_pieces = {
-        'article': [encoder.begin_article] + encoder.encode(item['text']) + [encoder.end_article],
+        'article': [encoder.begin_article] + encoded_article + [encoder.end_article],
         'domain': [encoder.begin_domain] + encoder.encode(item['domain']) + [encoder.end_domain],
         'title': [encoder.begin_title] + encoder.encode(item['title']) + [encoder.end_title],
     }
@@ -182,14 +185,18 @@ def _tokenize_article_pieces(encoder, item):
         article_pieces['summary'] = [encoder.begin_summary] + encoder.encode(item['summary']) + [encoder.end_summary]
 
     # 5/6: date
-    date_split = item['publish_date'].split('-')
-    assert len(date_split) == 3
-    assert date_split[0].isdigit()
+    if april_test_data:
+        article_pieces['date'] = [encoder.begin_date] + encoder.encode(item['date']) + [encoder.end_date]
+    else:
+        date_split = item['publish_date'].split('-')
+        assert len(date_split) == 3
+        assert date_split[0].isdigit()
 
-    date_txt = ['January', 'February', 'March', 'April', 'May', 'June', 'July',
-                'August', 'September', 'October', 'November', 'December'][int(date_split[0]) - 1] + ' {}, {}'.format(
-        date_split[1], date_split[2])
-    article_pieces['date'] = [encoder.begin_date] + encoder.encode(date_txt) + [encoder.end_date]
+        date_txt = ['January', 'February', 'March', 'April', 'May', 'June', 'July',
+                    'August', 'September', 'October', 'November',
+                    'December'][int(date_split[0]) - 1] + ' {}, {}'.format(
+            date_split[1], date_split[2])
+        article_pieces['date'] = [encoder.begin_date] + encoder.encode(date_txt) + [encoder.end_date]
 
     # 6/6: authors
     authors = ', '.join(item['authors'])
@@ -227,7 +234,7 @@ def _cut_tokens_to_add_stuff(tokens, stuff_to_add, desired_size, padding_token):
 
 def tokenize_for_grover_training(encoder, item, desired_size=1024, unconditional_prob=0.35, metadata_dropout_prob=0.1,
                                  cut_prob=0.2, drop_metadata_when_unconditional: bool = False,
-                                 ):
+                                 april_test_data: bool = False):
     """
     Not only will we tokenize an item with a BPE encoder, but we'll also put it in a nice format for language modeling.
     The goal is to MINIMIZE PADDING. If we don't fill up the desired size of 1024 tokens then we're wasting compute.
@@ -258,7 +265,7 @@ def tokenize_for_grover_training(encoder, item, desired_size=1024, unconditional
     :return:
     """
     # Get all the bits and pieces
-    article_pieces = _tokenize_article_pieces(encoder, item)
+    article_pieces = _tokenize_article_pieces(encoder, item, april_test_data)
     canonical_metadata_order = ['domain', 'date', 'authors', 'title']
 
     # unconditional_prob is probability we only generate the text first, without any metadata
