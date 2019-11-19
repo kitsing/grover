@@ -207,7 +207,8 @@ def _tokenize_article_pieces(encoder, item, april_test_data: bool = False):
         if len(authors) > 5:
             article_pieces['authors'] = [encoder.begin_authors] + encoder.encode(authors) + [encoder.end_authors]
     else:
-        article_pieces['authors'] = [encoder.begin_authors] + encoder.encode(item['authors']) + [encoder.end_authors]
+        # article_pieces['authors'] = [encoder.begin_authors] + encoder.encode(item['authors']) + [encoder.end_authors]
+        pass
     return article_pieces
 
 
