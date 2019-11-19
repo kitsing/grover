@@ -181,8 +181,11 @@ def _tokenize_article_pieces(encoder, item, april_test_data: bool = False):
         'title': [encoder.begin_title] + encoder.encode(item['title']) + [encoder.end_title],
     }
     # 4/6: Attach the summary too, why the hell not
-    if item['summary'] and len(item['summary']) > 50:
-        article_pieces['summary'] = [encoder.begin_summary] + encoder.encode(item['summary']) + [encoder.end_summary]
+    if not april_test_data:
+        if item['summary'] and len(item['summary']) > 50:
+            article_pieces['summary'] = [encoder.begin_summary] \
+                                        + encoder.encode(item['summary']) \
+                                        + [encoder.end_summary]
 
     # 5/6: date
     if april_test_data:
