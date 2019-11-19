@@ -186,8 +186,8 @@ with S3TFRecordWriter(train_file) as train_writer, S3TFRecordWriter(val_file) as
             writer2use = train_writer
         elif article['split'] == 'val':
             writer2use = val_writer
-        elif article['split'] == test_writer:
-            writer2use = test_file
+        elif article['split'] == 'test':
+            writer2use = test_writer
         else:
             raise NotImplementedError
         assert len(article['input_ids']) == (args.max_seq_length + 1)
