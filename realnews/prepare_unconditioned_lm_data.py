@@ -145,7 +145,8 @@ def article_only_iterator(encoder, final_desired_size=1025, april_test_data: boo
                         continue
                 a['input_ids'] = tokenize_for_grover_training(encoder, a, desired_size=final_desired_size,
                                                               unconditional_prob=1., metadata_dropout_prob=1.,
-                                                              cut_prob=0., drop_metadata_when_unconditional=True)
+                                                              cut_prob=0., drop_metadata_when_unconditional=True,
+                                                              )
                 a['inst_index'] = (l_no // args.num_folds)
                 # we don't do any truncation etc. just move on to the next article
                 if len(a['input_ids']) == 0 or len(a['input_ids']) >= final_desired_size:

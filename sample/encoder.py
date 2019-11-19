@@ -171,6 +171,7 @@ def _tokenize_article_pieces(encoder, item):
     fields are ['domain', 'date', 'authors', 'title', 'article', 'summary']
     :return: dict
     """
+    assert 'text' in item, f'{item}'
     article_pieces = {
         'article': [encoder.begin_article] + encoder.encode(item['text']) + [encoder.end_article],
         'domain': [encoder.begin_domain] + encoder.encode(item['domain']) + [encoder.end_domain],
@@ -225,7 +226,8 @@ def _cut_tokens_to_add_stuff(tokens, stuff_to_add, desired_size, padding_token):
 
 
 def tokenize_for_grover_training(encoder, item, desired_size=1024, unconditional_prob=0.35, metadata_dropout_prob=0.1,
-                                 cut_prob=0.2, drop_metadata_when_unconditional: bool = False):
+                                 cut_prob=0.2, drop_metadata_when_unconditional: bool = False,
+                                 ):
     """
     Not only will we tokenize an item with a BPE encoder, but we'll also put it in a nice format for language modeling.
     The goal is to MINIMIZE PADDING. If we don't fill up the desired size of 1024 tokens then we're wasting compute.
