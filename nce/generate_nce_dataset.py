@@ -16,9 +16,7 @@ def parse_args():
     parser.add_argument('--seed', default=42, type=int)
     parser.add_argument('--choice', default=0, type=int)
     parser.add_argument('--output-path', default='./')
-
     return parser.parse_args()
-
 
 def main():
     args = parse_args()
