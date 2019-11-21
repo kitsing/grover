@@ -114,10 +114,17 @@ flags.DEFINE_integer(
 flags.DEFINE_integer(
     "k", 5,
     "k value of NCE.")
-
+flags.DEFINE_string(
+    "gen_config_file", None, "configuration file of the noise model"
+)
 
 def main(_):
     from random import seed as rnd_seed
+    from sample.encoder import get_encoder
+    import numpy as np
+    encoder = get_encoder()
+    ignore_ids_np = np.array(encoder.special_tokens_onehot)
+    ignore_ids_np[encoder.__dict__['end_article']] = 0
     rnd_seed(FLAGS.seed)
     tf.set_random_seed(FLAGS.seed)
 
@@ -130,6 +137,7 @@ def main(_):
     tf.logging.set_verbosity(tf.logging.INFO)
 
     news_config = GroverConfig.from_json_file(FLAGS.config_file)
+    vanilla_config = GroverConfig.from_json_file(FLAGS.gen_config_file)
     print(news_config)
     if rank == 0:
         tf.gfile.MakeDirs(FLAGS.output_dir)
@@ -154,7 +162,8 @@ def main(_):
                                     learning_rate=FLAGS.learning_rate,
                                     num_train_steps=FLAGS.num_train_steps,
                                     num_warmup_steps=FLAGS.num_warmup_steps,
-                                    gen_checkpoint=FLAGS.gen_checkpoint, niter=FLAGS.niter
+                                    gen_checkpoint=FLAGS.gen_checkpoint, niter=FLAGS.niter,
+                                    ignore_ids=ignore_ids_np, vanilla_config=vanilla_config,
                                     )
 
     # If TPU is not available, this will fall back to normal Estimator on CPU

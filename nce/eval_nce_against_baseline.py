@@ -48,6 +48,9 @@ def compute_prob_under_model(model_config, batch_size_per_chunk, num_gpus, seq_l
     encoder = get_encoder()
     news_config = GroverConfig.from_json_file(model_config)
     noise_news_config = GroverConfig.from_json_file(noise_model_config)
+    gen_noise_config = None
+    if news_config.non_residual:
+        gen_noise_config = noise_news_config
 
     all_tokens = []
     all_probs = []
@@ -62,7 +65,7 @@ def compute_prob_under_model(model_config, batch_size_per_chunk, num_gpus, seq_l
             tokens = tf.placeholder(tf.int32, [batch_size_per_chunk, seq_length])
             all_tokens.append(tokens)
             probs = tf.stop_gradient(eval_seq(news_config, tokens, 1., baseline=model_is_grover, gen_scope='gen',
-                                              ignore_ids=ignore_ids, gen_config=noise_news_config))
+                                              ignore_ids=ignore_ids, gen_config=gen_noise_config))
             all_probs.append(probs)
             noise_probs = tf.stop_gradient(eval_seq(noise_news_config, tokens, 1., baseline=True, gen_scope='noise',
                                                     ignore_ids=ignore_ids, gen_config=noise_news_config))

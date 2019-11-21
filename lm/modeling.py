@@ -22,7 +22,7 @@ import tensorflow as tf
 
 from lm import optimization_adafactor
 from lm.utils import get_assignment_map_from_checkpoint, get_shape_list, get_attention_mask, gelu, layer_norm, dropout, \
-    construct_scalar_host_call, get_inverted_mask
+    construct_scalar_host_call, get_inverted_mask, get_assignment_map_from_checkpoint_remapped
 from typing import Optional
 
 class GroverConfig(object):
@@ -52,6 +52,7 @@ class GroverConfig(object):
                  reverse: bool = True,
                  capping_offset: float = 0.,
                  capping_method: str = 'none',
+                 non_residual: bool = False,
                  scope_prefix='newslm'):
         """Constructs NewsConfig.
 
@@ -109,6 +110,7 @@ class GroverConfig(object):
             self.softplus_capping = True
         elif self.capping_method == 'tanh':
             self.tanh_capping = True
+        self.non_residual = non_residual
 
     @classmethod
     def from_dict(cls, json_object):
@@ -523,7 +525,9 @@ class GroverModelResidual(object):
                  pad_token_id=0,
                  scope=None,
                  reuse=False, alpha: float = 1.,
-                 ignore_noise: bool = False, ignore_ids = None):
+                 ignore_noise: bool = False, ignore_ids = None, vanilla_config: Optional[GroverConfig] = None,
+                 vanilla_scope: Optional[str] = None
+                 ):
         """
         :param config:
         :param is_training:
@@ -543,6 +547,37 @@ class GroverModelResidual(object):
 
         self.alpha = alpha
 
+        input_scores = None
+        noise_scores = None
+        if self.config.non_residual:
+            noise_model_for_input = GroverModel(
+                scope=vanilla_scope,
+                config=vanilla_config,
+                is_training=is_training,
+                input_ids=input_ids,
+                pad_token_id=vanilla_config.pad_token_id,
+                chop_off_last_token=True,
+                reuse=tf.AUTO_REUSE,
+            )
+
+            input_scores = tf.stop_gradient(noise_model_for_input.per_seq_prob(ignore_ids=ignore_ids))
+            if not ignore_noise:
+                batch_size, k, seq_length = get_shape_list(noises, 3)
+                noise_model_for_noise = GroverModel(
+                    scope=vanilla_scope,
+                    config=vanilla_config,
+                    is_training=is_training,
+                    input_ids=tf.reshape(noises, (batch_size * k, seq_length)),
+                    pad_token_id=vanilla_config.pad_token_id,
+                    chop_off_last_token=True,
+                    reuse=tf.AUTO_REUSE,
+                )
+                noise_scores = tf.stop_gradient(tf.reshape(noise_model_for_noise.per_seq_prob(ignore_ids=ignore_ids),
+                                                           (batch_size, k)))
+
+        self.input_scores = input_scores
+        self.noise_scores = noise_scores
+
         if not is_training:
             self.config.hidden_dropout_prob = 0.0
             self.config.attention_probs_dropout_prob = 0.0
@@ -560,14 +595,23 @@ class GroverModelResidual(object):
                 batch_size, k_plus_one, seq_length = get_shape_list(to_score, 3)
                 to_score_reshaped = tf.reshape(to_score, (batch_size * k_plus_one, seq_length))
                 scored = get_loss(to_score_reshaped)
-                z = tf.reduce_logsumexp(tf.reshape(scored, (batch_size, k_plus_one)), axis=1)
+                scored_reshaped = tf.reshape(scored, (batch_size, k_plus_one))
+                if self.input_scores is not None:
+                    assert self.noise_scores is not None
+                    scores_under_noise = tf.concat((self.input_scores[:, None], self.noise_scores), axis=1)
+                    scored_reshaped = scored_reshaped - scores_under_noise
+                z = tf.reduce_logsumexp(scored_reshaped, axis=1)
                 return tf.reduce_mean(z, axis=0)
             else:
+                # FIXME take input_scores and noise_scores into account
+                raise NotImplementedError
                 scored = get_loss(tf.concat((input_ids[0][None, :], noises[1:, 0, :]), axis=0))
                 return tf.reduce_logsumexp(scored, axis=0)
 
         def get_num_loss():
             scored = get_loss(input_ids)
+            if self.input_scores is not None:
+                scored = scored - self.input_scores
             return - tf.reduce_mean(scored, axis=0), scored
 
         def get_loss(inp):
@@ -616,7 +660,6 @@ class GroverModelResidual(object):
             num_loss, residuals = get_num_loss()
             if not ignore_noise:
                 self.loss = num_loss + get_denom_loss()
-                # loss = tf.cond(sampled_num_or_denom, get_num_loss, get_denom_loss)
             self.residuals = residuals
 
         # THE OUTPUT BIAS DOES NOT SPARK JOY
@@ -1076,6 +1119,8 @@ def nce_model_fn_builder(config: GroverConfig, init_checkpoint,
                          num_train_steps, num_warmup_steps,
                          gen_checkpoint: Optional[str] = None,
                          correction_factor: float = 1., niter = 1,
+                         vanilla_config: Optional[GroverConfig] = None,
+                         ignore_ids: Optional = None
                          ):
 
     def model_fn(features, labels, mode, params):  # pylint: disable=unused-argument
@@ -1097,11 +1142,12 @@ def nce_model_fn_builder(config: GroverConfig, init_checkpoint,
             noises=noises,
             pad_token_id=config.pad_token_id,
             reuse=tf.AUTO_REUSE,
-            ignore_noise=(mode == tf.estimator.ModeKeys.PREDICT)
+            ignore_noise=(mode == tf.estimator.ModeKeys.PREDICT),
+            vanilla_scope='gen',
+            vanilla_config=vanilla_config, ignore_ids=ignore_ids,
         )
 
         total_loss = residual_model.total_loss()
-        reg_loss = 0
 
         if is_training:
             if config.regularize_g:
@@ -1116,6 +1162,10 @@ def nce_model_fn_builder(config: GroverConfig, init_checkpoint,
             train_op = None
             tvars = tf.trainable_variables()
             acc_hook = None
+        if config.non_residual:
+            (noise_assignment_map, noise_initialized_variable_names
+             ) = get_assignment_map_from_checkpoint_remapped(tvars, gen_checkpoint, 'newslm', 'gen')
+            tf.train.init_from_checkpoint(gen_checkpoint, noise_assignment_map)
 
         if reuse_gen:
             assert gen_checkpoint is not None
@@ -1242,7 +1292,8 @@ def initialize_from_context(initial_context, ignore_ids, news_config, p_for_topp
 
 
 def eval_seq(news_config: GroverConfig, tokens, correction_factor = 1., baseline: bool = False, gen_scope='gen',
-             ignore_ids: Optional = None, gen_config: Optional[GroverConfig] = None, discriminator_only: bool = False):
+             ignore_ids: Optional = None, gen_config: Optional[GroverConfig] = None, discriminator_only: bool = False,
+             ):
     assert not (baseline and discriminator_only)
     with tf.name_scope('evaluate_sequence'):
         if discriminator_only:
@@ -1254,7 +1305,8 @@ def eval_seq(news_config: GroverConfig, tokens, correction_factor = 1., baseline
                 noises=None,
                 pad_token_id=news_config.pad_token_id,
                 ignore_noise=True,
-                scope='dis', ignore_ids=ignore_ids
+                scope='dis', ignore_ids=ignore_ids,
+                vanilla_config=gen_config, vanilla_scope='gen'
             )
             return residual_model.residuals
 
@@ -1282,7 +1334,8 @@ def eval_seq(news_config: GroverConfig, tokens, correction_factor = 1., baseline
             noises=None,
             pad_token_id=news_config.pad_token_id,
             ignore_noise=True,
-            scope='dis', ignore_ids=ignore_ids
+            scope='dis', ignore_ids=ignore_ids,
+            vanilla_config=gen_config, vanilla_scope='gen'
         )
         residuals = residual_model.residuals
         unnormalized_p = residuals + correction_factor * lm_score

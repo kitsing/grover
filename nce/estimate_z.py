@@ -5,8 +5,9 @@ import tensorflow as tf
 from nce.eval_nce_against_baseline import get_dirty_noises
 from sample.encoder import get_encoder
 
+
 def get_g_under_model(model_config, batch_size_per_chunk, num_gpus, seq_length,
-                      dis_ckpt, sess):
+                      dis_ckpt, sess, gen_config, gen_ckpt):
     from sample.encoder import get_encoder
     from lm.modeling import GroverConfig, eval_seq
     from nce.utils import get_seq_probs
@@ -26,13 +27,17 @@ def get_g_under_model(model_config, batch_size_per_chunk, num_gpus, seq_length,
             tokens = tf.placeholder(tf.int32, [batch_size_per_chunk, seq_length])
             all_tokens.append(tokens)
             gs = tf.stop_gradient(eval_seq(news_config, tokens, 1., baseline=False,
-                                           ignore_ids=ignore_ids, discriminator_only=True))
+                                           ignore_ids=ignore_ids, discriminator_only=True,
+                                           gen_config=gen_config))
             all_gs.append(gs)
 
     with tf.device('/cpu:0'):
         merged_gs = tf.concat(all_gs, axis=0)
 
     restore('dis', dis_ckpt, sess)
+    if gen_ckpt is not None:
+        assert gen_config is not None
+        restore('gen', gen_ckpt, sess)
 
     gs_under_model = lambda inp: get_seq_probs(seqs=inp,
                                                batch_size=batch_size_per_chunk * num_gpus,
@@ -48,11 +53,12 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--noises')
     parser.add_argument('--model-config', default='/private/home/kitsing/git/grover/lm/configs/base.json')
-    parser.add_argument('--noise-model-config', default='/private/home/kitsing/git/grover/lm/configs/base.json')
+    parser.add_argument('--gen-config', default=None)
     parser.add_argument('--batch-size', default=8, type=int)
     parser.add_argument('--seq-length', default=1025, type=int)
     parser.add_argument('--num-gpus', default=8, type=int)
     parser.add_argument('--dis-ckpt', default='/checkpoint/kitsing/grover-models/base/model.ckpt')
+    parser.add_argument('--gen-ckpt', default=None)
     parser.add_argument('--output-path', default=None, type=str)
     args = parser.parse_args()
     from glob import glob
@@ -67,7 +73,7 @@ def main():
                                       args.batch_size, args.num_gpus,
                                       args.seq_length,
                                       args.dis_ckpt,
-                                      sess)
+                                      sess, gen_config=args.gen_config, gen_ckpt=args.gen_ckpt)
         gs_under_model = compute_g(noise_tokens)[0]
     if args.output_path is not None:
         np.savez(f'{args.output_path}', gs=gs_under_model)
