@@ -6,10 +6,10 @@
 # conda activate grover
 export PYTHONPATH=$(pwd)
 
-learning_rate=1e-5
+learning_rate=5e-5
 max_seq_length=1024
 save_checkpoint_steps=1000
-K=4
+K=1
 
 # You can customize the training here
 # mega, medium, or base
@@ -53,7 +53,7 @@ fi
 num_train_steps=800000
 
 # Make sure batch size scales.
-let batch_size=4
+let batch_size=3
 
 # NODE_LIST=$( scontrol show hostname ${SLURM_JOB_NODELIST} | sed -z 's/\n/\:8,/g' )
 # NODE_LIST=${NODE_LIST%?}

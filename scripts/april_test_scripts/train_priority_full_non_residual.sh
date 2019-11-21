@@ -19,4 +19,4 @@
 ## number of tasks per node
 #SBATCH --gres=gpu:8
 #SBATCH --constraint=volta32gb
-srun --label lm/train_nce_adafactor_small_non_residual.sh ${1} ${2} ${3} ${4}
+srun --label lm/april_test_scripts/nce_full_non_residual.sh ${1} ${2} ${3} ${4}

@@ -8,7 +8,7 @@ export PYTHONPATH=$(pwd)
 
 learning_rate=5e-5
 max_seq_length=1024
-save_checkpoint_steps=100
+save_checkpoint_steps=1000
 K=1
 
 # You can customize the training here
