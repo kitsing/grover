@@ -14,6 +14,7 @@ def get_g_under_model(model_config, batch_size_per_chunk, num_gpus, seq_length,
     from nce.utils import restore
     encoder = get_encoder()
     news_config = GroverConfig.from_json_file(model_config)
+    gen_news_config = GroverConfig.from_json_file(gen_config)
 
     all_tokens = []
     all_gs = []
@@ -28,14 +29,14 @@ def get_g_under_model(model_config, batch_size_per_chunk, num_gpus, seq_length,
             all_tokens.append(tokens)
             gs = tf.stop_gradient(eval_seq(news_config, tokens, 1., baseline=False,
                                            ignore_ids=ignore_ids, discriminator_only=True,
-                                           gen_config=gen_config))
+                                           gen_config=gen_news_config))
             all_gs.append(gs)
 
     with tf.device('/cpu:0'):
         merged_gs = tf.concat(all_gs, axis=0)
 
     restore('dis', dis_ckpt, sess)
-    if gen_ckpt is not None:
+    if not news_config.non_residual:
         assert gen_config is not None
         restore('gen', gen_ckpt, sess)
 
@@ -99,7 +100,7 @@ def compute_z(batch_size, dis_ckpt,
     encoder = get_encoder()
     noise_tokens = get_dirty_noises(noise_files, eoa=encoder.__dict__['end_article'],
                                     pad=encoder.padding, seq_length=seq_length)
-    print(f'noise shape: {noise_tokens.shape}')
+    print(f'noise shape: {noise_tokens.shape} num of chunks: {noise_tokens.shape[0] // chunk_size}')
     tf_config = tf.ConfigProto(allow_soft_placement=True)
     with tf.Session(config=tf_config, graph=tf.Graph()) as sess:
         compute_g = get_g_under_model(model_config,
@@ -109,8 +110,8 @@ def compute_z(batch_size, dis_ckpt,
                                       sess, gen_config=gen_config, gen_ckpt=gen_ckpt)
         gs_under_model = compute_g(noise_tokens)[0]
     log_zs = []
-    for chunk in range(gs_under_model.shape[0] // chunk_size):
-        gs_under_model_chunk = gs_under_model[chunk*chunk_size:(chunk+1):chunk_size]
+    for chunk in range(noise_tokens.shape[0] // chunk_size):
+        gs_under_model_chunk = gs_under_model[chunk*chunk_size:(chunk+1)*chunk_size]
         log_z = logsumexp(gs_under_model_chunk) - np.log(float(gs_under_model_chunk.shape[0]))
         log_zs.append(log_z)
     return gs_under_model, log_zs
