@@ -550,6 +550,7 @@ class GroverModelResidual(object):
         input_scores = None
         noise_scores = None
         if self.config.non_residual:
+            tf.logging.warn('initializing a non-residual model!')
             noise_model_for_input = GroverModel(
                 scope=vanilla_scope,
                 config=vanilla_config,
@@ -574,6 +575,8 @@ class GroverModelResidual(object):
                 )
                 noise_scores = tf.stop_gradient(tf.reshape(noise_model_for_noise.per_seq_prob(ignore_ids=ignore_ids),
                                                            (batch_size, k)))
+        else:
+            tf.logging.warn('initializing a residual model!')
 
         self.input_scores = input_scores
         self.noise_scores = noise_scores
