@@ -16,5 +16,6 @@
   "coupled": true,
   "capping_method": "softplus",
   "capping_offset": 20,
-  "reverse": true
+  "reverse": true,
+  "non_residual": false
 }

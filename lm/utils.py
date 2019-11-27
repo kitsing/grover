@@ -178,6 +178,8 @@ def get_assignment_map_from_checkpoint_remapped(tvars, init_checkpoint, old_scop
         if name.startswith(new_scope):
             splitted_name = name.split(new_scope)
             name = old_scope.join(splitted_name)
+        else:
+            continue
         m = re.match("^(.*):\\d+$", name)
         if m is not None:
             name = m.group(1)
@@ -189,9 +191,10 @@ def get_assignment_map_from_checkpoint_remapped(tvars, init_checkpoint, old_scop
     for x in init_vars:
         (name, var) = (x[0], x[1])
         if name not in name_to_variable:
-            tf.logging.warn(f'{name} not found in checkpoint')
+            tf.logging.warn(f'{name} not found in name_to_varible mapping. new_scope: {new_scope} old_scope: {old_scope}')
             continue
-        assignment_map[name] = name
+        # assignment_map[name] = name
+        assignment_map[name] = name_to_variable[name]
         initialized_variable_names[name] = 1
         initialized_variable_names[name + ":0"] = 1
     return (assignment_map, initialized_variable_names)
