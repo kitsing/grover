@@ -4,6 +4,7 @@ import numpy as np
 import tensorflow as tf
 from nce.estimate_z import get_g_under_model, compute_z, compute_confidence
 from sample.encoder import get_encoder
+from scipy.special import logsumexp
 
 def get_tokens(token_file):
     with np.load(token_file) as f:
@@ -33,7 +34,8 @@ def main():
     tf_config = tf.ConfigProto(allow_soft_placement=True)
     _, log_zs = compute_z(args.batch_size, args.dis_ckpt, args.gen_ckpt, args.gen_config, args.model_config,
                           noise_files, args.num_gpus, args.seq_length, args.chunk_size)
-    lower_log_z, upper_log_z = compute_confidence(log_zs, args.confidence)
+    log_z_lower, log_z_upper = compute_confidence(log_zs, args.confidence)
+
     with tf.Session(config=tf_config, graph=tf.Graph()) as sess:
         compute_prob = get_g_under_model(model_config=args.model_config,
                                          batch_size_per_chunk=args.batch_size,
@@ -43,20 +45,27 @@ def main():
                                          sess=sess, gen_ckpt=args.gen_ckpt,
                                          gen_config=args.gen_config)
         inp_probs_under_model, = tuple(compute_prob(inp_tokens))
-
+    val_score_reshaped = np.reshape(inp_probs_under_model, (-1, 1))
+    log_z_reshaped_lower = np.ones_like(val_score_reshaped) * (np.log(args.chunk_size) + log_z_lower)
+    log_z_reshaped_upper = np.ones_like(val_score_reshaped) * (np.log(args.chunk_size) + log_z_upper)
+    denom_lower = logsumexp(np.concatenate((val_score_reshaped, log_z_reshaped_lower), axis=1), axis=1)
+    denom_upper = logsumexp(np.concatenate((val_score_reshaped, log_z_reshaped_upper), axis=1), axis=1)
+    nce_lower = np.mean(inp_probs_under_model - denom_lower)
+    nce_upper = np.mean(inp_probs_under_model - denom_upper)
     geo_mean_r = np.mean(inp_probs_under_model)
 
     ppl_reduction = lambda log_z, ratio: ratio * (log_z - geo_mean_r)
-    lower_ppl = np.exp(ppl_reduction(lower_log_z, (inp_tokens.shape[0] / word_count)))
-    upper_ppl = np.exp(ppl_reduction(upper_log_z, (inp_tokens.shape[0] / word_count)))
+    lower_ppl = np.exp(ppl_reduction(log_z_lower, (inp_tokens.shape[0] / word_count)))
+    upper_ppl = np.exp(ppl_reduction(log_z_upper, (inp_tokens.shape[0] / word_count)))
 
-    lower_sld = np.exp(ppl_reduction(lower_log_z, 1.))
-    upper_sld = np.exp(ppl_reduction(upper_log_z, 1.))
+    lower_sld = np.exp(ppl_reduction(log_z_lower, 1.))
+    upper_sld = np.exp(ppl_reduction(log_z_upper, 1.))
 
     def ci_string(a, b):
         m = (a + b) / 2
         return f'{m} \\pm {abs(m-a)}'
-    print(f'ppl_reduction: {ci_string(lower_ppl, upper_ppl)}\tsld:{ci_string(lower_sld, upper_sld)}')
+    print(f'nce baseline: {np.log(args.chunk_size + 1)}')
+    print(f'nce: {ci_string(nce_lower, nce_upper)}\tppl_reduction: {ci_string(lower_ppl, upper_ppl)}\tsld:{ci_string(lower_sld, upper_sld)}')
 
 
 if __name__ == '__main__':
