@@ -45,18 +45,18 @@ def main():
         inp_probs_under_model, = tuple(compute_prob(inp_tokens))
 
     geo_mean_r = np.mean(inp_probs_under_model)
-    if args.sentence_level:
-        s_w_ratio = 1.
-    else:
-        s_w_ratio = (inp_tokens.shape[0] / word_count)
-    ppl_reduction = lambda log_z: np.exp( s_w_ratio * (log_z - geo_mean_r) )
-    lower_ppl = ppl_reduction(lower_log_z)
-    upper_ppl = ppl_reduction(upper_log_z)
+
+    ppl_reduction = lambda log_z, ratio: ratio * (log_z - geo_mean_r)
+    lower_ppl = np.exp(ppl_reduction(lower_log_z, (inp_tokens.shape[0] / word_count)))
+    upper_ppl = np.exp(ppl_reduction(upper_log_z, (inp_tokens.shape[0] / word_count)))
+
+    lower_sld = np.exp(ppl_reduction(lower_log_z, 1.))
+    upper_sld = np.exp(ppl_reduction(upper_log_z, 1.))
 
     def ci_string(a, b):
         m = (a + b) / 2
         return f'{m} \\pm {abs(m-a)}'
-    print(f'ppl_reduction: {ci_string(lower_ppl, upper_ppl)}')
+    print(f'ppl_reduction: {ci_string(lower_ppl, upper_ppl)}\tsld:{ci_string(lower_sld, upper_sld)}')
 
 
 if __name__ == '__main__':
