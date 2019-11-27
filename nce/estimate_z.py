@@ -50,6 +50,7 @@ def get_g_under_model(model_config, batch_size_per_chunk, num_gpus, seq_length,
 
 def main():
     import argparse
+    from glob import glob
     parser = argparse.ArgumentParser()
     parser.add_argument('--noises')
     parser.add_argument('--model-config', default='/private/home/kitsing/git/grover/lm/configs/base.json')
@@ -60,24 +61,59 @@ def main():
     parser.add_argument('--dis-ckpt', default='/checkpoint/kitsing/grover-models/base/model.ckpt')
     parser.add_argument('--gen-ckpt', default=None)
     parser.add_argument('--output-path', default=None, type=str)
+    parser.add_argument('--confidence', default=0.95, type=float)
     args = parser.parse_args()
-    from glob import glob
-    encoder = get_encoder()
     noise_files = glob(args.noises)
+    model_config = args.model_config
+    batch_size = args.batch_size
+    num_gpus = args.num_gpus
+    seq_length = args.seq_length
+    dis_ckpt = args.dis_ckpt
+    gen_ckpt = args.gen_ckpt
+    gen_config = args.gen_config
+    gs_under_model, log_zs = compute_z(batch_size,
+                                       dis_ckpt, gen_ckpt,
+                                       gen_config, model_config,
+                                       noise_files, num_gpus,
+                                       seq_length)
+
+    if args.output_path is not None:
+        np.savez(f'{args.output_path}', gs=gs_under_model)
+
+    print(compute_confidence(log_zs, args.confidence))
+
+
+def compute_confidence(log_zs, confidence: float = 0.95):
+    from scipy.stats import sem, t
+    samples = np.exp(log_zs)
+    m = np.mean(samples)
+    std_err = sem(samples)
+    h = std_err * t.ppf((1 + confidence) / 2, len(log_zs) - 1)
+    return np.log(m - h), np.log(m + h)
+
+
+def compute_z(batch_size, dis_ckpt,
+              gen_ckpt, gen_config,
+              model_config, noise_files,
+              num_gpus, seq_length, chunk_size: int = 512):
+    encoder = get_encoder()
     noise_tokens = get_dirty_noises(noise_files, eoa=encoder.__dict__['end_article'],
-                                    pad=encoder.padding, seq_length=args.seq_length)
+                                    pad=encoder.padding, seq_length=seq_length)
     print(f'noise shape: {noise_tokens.shape}')
     tf_config = tf.ConfigProto(allow_soft_placement=True)
     with tf.Session(config=tf_config, graph=tf.Graph()) as sess:
-        compute_g = get_g_under_model(args.model_config,
-                                      args.batch_size, args.num_gpus,
-                                      args.seq_length,
-                                      args.dis_ckpt,
-                                      sess, gen_config=args.gen_config, gen_ckpt=args.gen_ckpt)
+        compute_g = get_g_under_model(model_config,
+                                      batch_size, num_gpus,
+                                      seq_length,
+                                      dis_ckpt,
+                                      sess, gen_config=gen_config, gen_ckpt=gen_ckpt)
         gs_under_model = compute_g(noise_tokens)[0]
-    if args.output_path is not None:
-        np.savez(f'{args.output_path}', gs=gs_under_model)
-    print(np.exp(logsumexp(gs_under_model) - np.log(float(gs_under_model.shape[0]))))
+    log_zs = []
+    for chunk in range(gs_under_model.shape[0] // chunk_size):
+        gs_under_model_chunk = gs_under_model[chunk*chunk_size:(chunk+1):chunk_size]
+        log_z = logsumexp(gs_under_model_chunk) - np.log(float(gs_under_model_chunk.shape[0]))
+        log_zs.append(log_z)
+    return gs_under_model, log_zs
 
 
 if __name__ == '__main__':
