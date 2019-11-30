@@ -48,7 +48,7 @@ def get_g_under_model(model_config, batch_size_per_chunk, num_gpus, seq_length,
         merged_gs = tf.concat(all_gs, axis=0)
 
     restore('dis', dis_ckpt, sess)
-    if news_config.non_residual:
+    if news_config.non_residual or dis_is_gen2:
         assert gen_config is not None
         restore('gen', gen_ckpt, sess)
 
