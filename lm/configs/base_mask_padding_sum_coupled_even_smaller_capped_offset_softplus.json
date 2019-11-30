@@ -15,6 +15,6 @@
   "hyper_normalize": false,
   "coupled": true,
   "capping_method": "softplus",
-  "capping_offset": 0.6931471806,
+  "capping_offset": 20,
   "reverse": true
 }
