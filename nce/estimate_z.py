@@ -7,9 +7,9 @@ from sample.encoder import get_encoder
 
 
 def get_g_under_model(model_config, batch_size_per_chunk, num_gpus, seq_length,
-                      dis_ckpt, sess, gen_config, gen_ckpt):
+                      dis_ckpt, sess, gen_config, gen_ckpt, dis_is_gen2: bool = False):
     from sample.encoder import get_encoder
-    from lm.modeling import GroverConfig, eval_seq
+    from lm.modeling import GroverConfig, eval_seq, eval_seq_gen
     from nce.utils import get_seq_probs
     from nce.utils import restore
     encoder = get_encoder()
@@ -27,9 +27,21 @@ def get_g_under_model(model_config, batch_size_per_chunk, num_gpus, seq_length,
             # actual examples
             tokens = tf.placeholder(tf.int32, [batch_size_per_chunk, seq_length])
             all_tokens.append(tokens)
-            gs = tf.stop_gradient(eval_seq(news_config, tokens, 1., baseline=False,
-                                           ignore_ids=ignore_ids, discriminator_only=True,
-                                           gen_config=gen_news_config))
+            if dis_is_gen2:
+                unstopped_gs = eval_seq_gen(gen_config_1=gen_news_config,
+                                            tokens=tokens,
+                                            correction_factor=1.,
+                                            gen_scope_1='gen',
+                                            ignore_ids=ignore_ids_np,
+                                            gen_config_2=news_config,
+                                            gen_scope_2='dis')
+            else:
+                unstopped_gs = eval_seq(news_config, tokens,
+                                        1., baseline=False,
+                                        ignore_ids=ignore_ids,
+                                        discriminator_only=True,
+                                        gen_config=gen_news_config)
+            gs = tf.stop_gradient(unstopped_gs)
             all_gs.append(gs)
 
     with tf.device('/cpu:0'):
@@ -96,7 +108,8 @@ def compute_confidence(log_zs, confidence: float = 0.95):
 def compute_z(batch_size, dis_ckpt,
               gen_ckpt, gen_config,
               model_config, noise_files,
-              num_gpus, seq_length, chunk_size: int = 512):
+              num_gpus, seq_length, chunk_size: int = 512,
+              dis_is_gen2: bool = False):
     encoder = get_encoder()
     noise_tokens = get_dirty_noises(noise_files, eoa=encoder.__dict__['end_article'],
                                     pad=encoder.padding, seq_length=seq_length)
@@ -107,7 +120,8 @@ def compute_z(batch_size, dis_ckpt,
                                       batch_size, num_gpus,
                                       seq_length,
                                       dis_ckpt,
-                                      sess, gen_config=gen_config, gen_ckpt=gen_ckpt)
+                                      sess, gen_config=gen_config, gen_ckpt=gen_ckpt,
+                                      dis_is_gen2=dis_is_gen2)
         gs_under_model = compute_g(noise_tokens)[0]
     log_zs = []
     for chunk in range(noise_tokens.shape[0] // chunk_size):

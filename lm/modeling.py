@@ -1294,6 +1294,37 @@ def initialize_from_context(initial_context, ignore_ids, news_config, p_for_topp
     }
 
 
+def eval_seq_gen(gen_config_1: GroverConfig, tokens, correction_factor = 1., gen_scope_1='gen',
+                 ignore_ids: Optional = None, gen_config_2: Optional[GroverConfig] = None, gen_scope_2: str = 'dis',
+                 ):
+    with tf.name_scope('evaluate_sequence'):
+        gen_model_1 = GroverModel(
+            config=gen_config_1,
+            is_training=False,
+            input_ids=tokens,
+            reuse=tf.AUTO_REUSE,
+            scope=gen_scope_1,
+            chop_off_last_token=True,
+            do_cache=True,
+            cache=None,
+        )
+        lm_score_1 = gen_model_1.per_seq_prob(ignore_ids=ignore_ids)
+
+        gen_model_2 = GroverModel(
+            config=gen_config_2,
+            is_training=False,
+            input_ids=tokens,
+            reuse=tf.AUTO_REUSE,
+            scope=gen_scope_2,
+            chop_off_last_token=True,
+            do_cache=True,
+            cache=None,
+        )
+        lm_score_2 = gen_model_2.per_seq_prob(ignore_ids=ignore_ids)
+
+        return lm_score_2 - lm_score_1
+
+
 def eval_seq(news_config: GroverConfig, tokens, correction_factor = 1., baseline: bool = False, gen_scope='gen',
              ignore_ids: Optional = None, gen_config: Optional[GroverConfig] = None, discriminator_only: bool = False,
              ):

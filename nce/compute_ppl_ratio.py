@@ -26,6 +26,7 @@ def main():
     parser.add_argument('--chunk-size', default=512, type=int)
     parser.add_argument('--confidence', default=0.95, type=float)
     parser.add_argument('--sentence-level', action='store_true')
+    parser.add_argument('--dis-is-gen2', action='store_true')
     args = parser.parse_args()
     noise_files = glob(args.noise_files)
     encoder = get_encoder()
@@ -33,7 +34,8 @@ def main():
     word_count = np.sum(inp_tokens[:, 1:] != encoder.padding)
     tf_config = tf.ConfigProto(allow_soft_placement=True)
     _, log_zs = compute_z(args.batch_size, args.dis_ckpt, args.gen_ckpt, args.gen_config, args.model_config,
-                          noise_files, args.num_gpus, args.seq_length, args.chunk_size)
+                          noise_files, args.num_gpus, args.seq_length, args.chunk_size,
+                          dis_is_gen2=args.dis_is_gen2)
     log_z_lower, log_z_upper = compute_confidence(log_zs, args.confidence)
 
     with tf.Session(config=tf_config, graph=tf.Graph()) as sess:
@@ -43,7 +45,8 @@ def main():
                                          seq_length=args.seq_length,
                                          dis_ckpt=args.dis_ckpt,
                                          sess=sess, gen_ckpt=args.gen_ckpt,
-                                         gen_config=args.gen_config)
+                                         gen_config=args.gen_config,
+                                         dis_is_gen2=args.dis_is_gen2)
         inp_probs_under_model, = tuple(compute_prob(inp_tokens))
     val_score_reshaped = np.reshape(inp_probs_under_model, (-1, 1))
     log_z_reshaped_lower = np.ones_like(val_score_reshaped) * (np.log(args.chunk_size) + log_z_lower)
