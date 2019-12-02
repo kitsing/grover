@@ -102,7 +102,13 @@ def compute_confidence(log_zs, confidence: float = 0.95):
     m = np.mean(samples)
     std_err = sem(samples)
     h = std_err * t.ppf((1 + confidence) / 2, len(log_zs) - 1)
-    return np.log(m - h), np.log(m + h)
+    if m-h < 0:
+        log_m_m_h = -100
+        tf.logging.warn('m - h < 0')
+    else:
+        log_m_m_h = np.log(m-h)
+    tf.logging.warn(f'lower: {log_m_m_h}, upper: {logsumexp((np.log(m), np.log(h)))}, m: {m}, h: {h}')
+    return log_m_m_h, logsumexp((np.log(m), np.log(h)))
 
 
 def compute_z(batch_size, dis_ckpt,
