@@ -53,6 +53,7 @@ class GroverConfig(object):
                  capping_offset: float = 0.,
                  capping_method: str = 'none',
                  non_residual: bool = False,
+                 using_gru: bool = False,
                  scope_prefix='newslm'):
         """Constructs NewsConfig.
 
@@ -104,6 +105,7 @@ class GroverConfig(object):
         self.softplus_capping = False
         self.gelu_capping = False
         self.tanh_capping = False
+        self.using_gru = using_gru
         if self.capping_method == 'gelu':
             self.gelu_capping = True
         elif self.capping_method == 'softplus':
@@ -701,6 +703,8 @@ class GroverModelResidual(object):
         # forth from a 3D tensor to a 2D tensor. Re-shapes are normally free on
         # the GPU/CPU but may not be free on the TPU, so we want to minimize them to
         # help the optimizer.
+        if config.using_gru:
+            gru_outputs = tf.keras.layers.Bidirectional(tf.keras.layers.CuDNNGRU(512, return_sequences=True))
         hidden_state = tf.reshape(embeddings, [original_batch_size * seq_length, config.hidden_size])
         new_kvs = []
         for layer_idx, layer_cache in enumerate(caches):
