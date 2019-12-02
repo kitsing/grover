@@ -61,8 +61,8 @@ def main():
     lower_ppl = np.exp(ppl_reduction(log_z_lower, (inp_tokens.shape[0] / word_count)))
     upper_ppl = np.exp(ppl_reduction(log_z_upper, (inp_tokens.shape[0] / word_count)))
 
-    lower_sld = np.exp(ppl_reduction(log_z_lower, 1.))
-    upper_sld = np.exp(ppl_reduction(log_z_upper, 1.))
+    lower_sld = ppl_reduction(log_z_lower, 1.)
+    upper_sld = ppl_reduction(log_z_upper, 1.)
 
     def ci_string(a, b):
         m = (a + b) / 2
