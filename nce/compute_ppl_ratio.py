@@ -27,6 +27,7 @@ def main():
     parser.add_argument('--confidence', default=0.95, type=float)
     parser.add_argument('--sentence-level', action='store_true')
     parser.add_argument('--dis-is-gen2', action='store_true')
+    parser.add_argument('--print-large-abs', action='store_true')
     args = parser.parse_args()
     noise_files = glob(args.noise_files)
     encoder = get_encoder()
