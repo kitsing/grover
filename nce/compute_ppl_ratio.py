@@ -67,8 +67,9 @@ def main():
     def ci_string(a, b):
         m = (a + b) / 2
         return f'{m} \\pm {abs(m-a)}'
-    print(f'nce baseline: {np.log(args.chunk_size + 1)}')
-    print(f'nce: {ci_string(nce_lower, nce_upper)}\tppl_reduction: {ci_string(lower_ppl, upper_ppl)}\tsld:{ci_string(lower_sld, upper_sld)}')
+    nce_baseline = np.log(args.chunk_size + 1)
+    print(f'nce baseline: {nce_baseline}')
+    print(f'nce: {ci_string(nce_lower + nce_baseline, nce_upper + nce_baseline)}\tppl_reduction: {ci_string(lower_ppl, upper_ppl)}\tsld:{ci_string(lower_sld, upper_sld)}')
 
 
 if __name__ == '__main__':
