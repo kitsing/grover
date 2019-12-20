@@ -12,12 +12,12 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--noises')
     parser.add_argument('--model-config', default='/private/home/kitsing/git/grover/lm/configs/base.json')
-    parser.add_argument('--gen-config', default=None)
+    parser.add_argument('--gen-config', default='/private/home/kitsing/git/grover/lm/configs/base.json')
     parser.add_argument('--batch-size', default=8, type=int)
     parser.add_argument('--seq-length', default=1025, type=int)
     parser.add_argument('--num-gpus', default=8, type=int)
     parser.add_argument('--dis-ckpt', default='/checkpoint/kitsing/grover-models/base/model.ckpt')
-    parser.add_argument('--gen-ckpt', default=None)
+    parser.add_argument('--gen-ckpt', default='/checkpoint/kitsing/grover-models/base/model.ckpt')
     parser.add_argument('--output-path', default=None, type=str)
     args = parser.parse_args()
     noise_files = glob(args.noises)
@@ -34,8 +34,8 @@ def main():
                                               noise_files, num_gpus,
                                               seq_length)
     from csv import DictWriter
-    with open(args.output_path, mode='wb') as f:
-        writer = DictWriter(f, ['score', 'text'])
+    with open(args.output_path, mode='w', newline='') as f:
+        writer = DictWriter(f, fieldnames=['score', 'text'])
         writer.writeheader()
         for score, text in zip(gs_under_model, texts):
             writer.writerow({'score': score, 'text': text})
