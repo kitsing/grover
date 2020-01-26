@@ -28,6 +28,7 @@ def main():
     parser.add_argument('--sentence-level', action='store_true')
     parser.add_argument('--dis-is-gen2', action='store_true')
     parser.add_argument('--print-large-abs', action='store_true')
+    parser.add_argument('--output-seq-probs', default=None, type=str)
     args = parser.parse_args()
     noise_files = glob(args.noise_files)
     encoder = get_encoder()
@@ -49,6 +50,8 @@ def main():
                                          gen_config=args.gen_config,
                                          dis_is_gen2=args.dis_is_gen2)
         inp_probs_under_model, = tuple(compute_prob(inp_tokens))
+        if args.output_seq_probs is not None:
+            np.savez_compressed(args.output_seq_probs, inp_probs=inp_probs_under_model)
     val_score_reshaped = np.reshape(inp_probs_under_model, (-1, 1))
     log_z_reshaped_lower = np.ones_like(val_score_reshaped) * (np.log(args.chunk_size) + log_z_lower)
     log_z_reshaped_upper = np.ones_like(val_score_reshaped) * (np.log(args.chunk_size) + log_z_upper)
