@@ -51,7 +51,7 @@ def main():
                                          dis_is_gen2=args.dis_is_gen2)
         inp_probs_under_model, = tuple(compute_prob(inp_tokens))
         if args.output_seq_probs is not None:
-            np.savez_compressed(args.output_seq_probs, inp_probs=inp_probs_under_model)
+            np.savez_compressed(args.output_seq_probs, inp_probs=inp_probs_under_model, log_zs=log_zs)
     val_score_reshaped = np.reshape(inp_probs_under_model, (-1, 1))
     log_z_reshaped_lower = np.ones_like(val_score_reshaped) * (np.log(args.chunk_size) + log_z_lower)
     log_z_reshaped_upper = np.ones_like(val_score_reshaped) * (np.log(args.chunk_size) + log_z_upper)
